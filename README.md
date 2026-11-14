@@ -43,7 +43,7 @@ switching between apps. A timer gets its own small island next to the music. Rig
 </tr>
 </table>
 
-## Claude Code, right in the island
+## AI agents, right in the island
 
 <table>
 <tr>
@@ -57,6 +57,19 @@ switching between apps. A timer gets its own small island next to the music. Rig
 </table>
 
 <img src="docs/images/agent.png" width="49%" alt="Claude Code working, shown in the compact island">
+
+### Any other agent, script or build tool
+
+Anything that can run a command can show itself in the island, with no setup:
+
+```bash
+"Dynamic Island.exe" --island --name "Nightly build" --event start --text "Build and test"
+"Dynamic Island.exe" --island --name "Nightly build" --event step  --text "Compiling 214 files"
+"Dynamic Island.exe" --island --name "Nightly build" --event done  --text "All 512 tests passed"
+```
+
+`--event` is `start`, `step`, `needs-you`, `done`, `error` or `end`. Calls with the same `--name` (or `--id`) update one
+island; `--color "#ff9f0a"` sets its colour. Settings › AI agents has these with the full path, ready to copy.
 
 ## Calendar
 

@@ -164,6 +164,15 @@ const SECTIONS = {
     <div class="card">${item('agents', 'Show AI agents in the island', 'Off: agents ask in their own windows as usual.')}</div>
     <div class="sec">Agents</div>
     <div class="card">${rows}</div>
+    <div class="sec">Any other agent, script or build tool</div>
+    <div class="card"><div class="item" style="display:block">
+      <div class="s" style="margin:0 0 10px">Anything that can run a command can show itself in the island: a build, a test run, a deploy, a backup, or an AI agent not listed above. Use the same <b>--name</b> (or <b>--id</b>) to update one island; <b>--event</b> is start, step, needs-you, done, error or end.</div>
+      ${[['start', 'Build and test'], ['step', 'Compiling 214 files'], ['done', 'All 512 tests passed'], ['error', '3 tests failed']].map(([ev, t]) => {
+        const cmd = `${info.islandCmd ? (/^"/.test(info.islandCmd) ? '& ' : '') + info.islandCmd : '"Dynamic Island.exe" --island'} --name "Nightly build" --event ${ev} --text "${t}"`;
+        return `<div class="cmdrow"><code>${esc(cmd)}</code><button class="btn" data-copy="${esc(cmd)}">Copy</button></div>`;
+      }).join('')}
+      <div class="s" style="margin-top:8px">Optional: <b>--color "#ff9f0a"</b> for its colour, <b>--project</b> for a subtitle. The "&amp; " in front is for PowerShell; leave it out in Command Prompt or scripts.</div>
+    </div></div>
     <p class="lead" style="margin-top:14px">Connecting adds small hooks to that agent's own settings (a backup is made first); nothing else needs installing. They never slow the agent down, and if the island isn't running, or you don't answer within 55 seconds, the agent asks you as usual.</p>`;
   },
 
@@ -215,6 +224,8 @@ document.addEventListener('click', async (e) => {
     await refreshClaude();
     return;
   }
+  const cp = e.target.closest('[data-copy]');
+  if (cp) { try { await navigator.clipboard.writeText(cp.dataset.copy); } catch { /* clipboard blocked */ } cp.textContent = 'Copied'; setTimeout(() => { cp.textContent = 'Copy'; }, 1400); return; }
   // ----- calendar -----
   const lg = e.target.closest('[data-login]');
   if (lg && !calBusy) {

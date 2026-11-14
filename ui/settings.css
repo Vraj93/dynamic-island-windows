@@ -61,3 +61,5 @@ details.adv{margin-top:22px;max-width:720px}
 details.adv summary{cursor:pointer;color:rgba(255,255,255,.6);font-size:13px;font-weight:600;padding:4px}
 details.adv summary:hover{color:#fff}
 .d{color:rgba(255,255,255,.45);font-weight:400}
+.cmdrow{display:flex;gap:10px;align-items:center;margin-top:6px}
+.cmdrow code{flex:1;min-width:0;font-family:"Cascadia Mono",Consolas,monospace;font-size:12px;background:#121215;border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:8px 10px;white-space:nowrap;overflow:auto;user-select:text;color:#d4d4d8}

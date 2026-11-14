@@ -215,6 +215,7 @@ function toolKind(tool) {
   if (/^(Grep|Glob|LS)$/.test(tool)) return ['Search', '191,140,255'];
   if (/^Web/.test(tool)) return ['Web', '100,210,255'];
   if (/^(Task|Agent)$/.test(tool)) return ['Agent', '255,111,174'];
+  if (tool === 'Step') return ['Step', '48,209,88'];
   return ['Tool', '161,161,170'];
 }
 function describeStep(tool, input = {}) {
@@ -260,7 +261,7 @@ const AGENT_NAME = 'Claude Code';
 const AGENT_COMPACT_W = 420;
 // Display names for each agent that can report to the island (see electron/hooks/agent-hook.js).
 const AGENT_NAMES = { 'claude-code': 'Claude Code', codex: 'Codex', gemini: 'Gemini', copilot: 'Copilot', cursor: 'Cursor' };
-const agentName = (a) => (a && AGENT_NAMES[a.agent]) || AGENT_NAME;
+const agentName = (a) => (a && (a.agentName || AGENT_NAMES[a.agent])) || AGENT_NAME;
 
 /* Timer | Stopwatch switch at the top of both panels (the stopwatch lives inside Timer). */
 function modeSwitch(active) {
@@ -488,8 +489,10 @@ const views = {
     const others = list.filter((x) => x !== a).map((x) => `
       <button class="srcrow" data-act="focusAgent" data-arg="${esc(x.id)}">${x.status === 'done' ? check(16) : spinner(16)}
         <span class="f13 sp ell" style="font-weight:600">${esc(agentName(x) + (x.project ? ' · ' + x.project : ''))}</span><span class="d f12 ell" style="max-width:220px">${esc(x.status === 'done' ? 'finished' : x.step)}</span></button>`).join('');
-    const sub = err ? 'Stopped with an error' : done ? `Finished${a.steps ? ` · ${a.steps} step${a.steps === 1 ? '' : 's'}` : ''}`
-      : `${STAGE_TEXT[stage]} · stage ${stage + 1} of 4${a.steps ? ` · step ${a.steps}` : ''}`;
+    const script = a.agent === 'custom'; // a script or program posting by itself: its own steps, no Read/Edit/Test
+    const nSteps = script ? a.feed.length : a.steps;
+    const sub = err ? 'Stopped with an error' : done ? `Finished${nSteps ? ` · ${nSteps} step${nSteps === 1 ? '' : 's'}` : ''}`
+      : script ? `Running${nSteps ? ` · step ${nSteps}` : ''}` : `${STAGE_TEXT[stage]} · stage ${stage + 1} of 4${a.steps ? ` · step ${a.steps}` : ''}`;
     return {
       html: `<div class="v texp aexp" style="--ac:${rgb}">
         <div class="atint"></div>
@@ -508,7 +511,7 @@ const views = {
           ${right}
         </div>
         ${done && a.answer ? `<div class="aanswer">${esc(a.answer)}</div>` : ''}
-        <div class="astages">${bars}</div>
+        ${script ? '' : `<div class="astages">${bars}</div>`}
         ${others ? `<div class="srclist">${others}</div>` : ''}
       </div>`,
       radius: 34,
@@ -1067,6 +1070,9 @@ function onAgentEvent(ev, fromPermission) {
   a.updated = now;
   if (ev.cwd) a.project = baseName(ev.cwd);
   if (ev.session_title) a.title = ev.session_title;
+  // Scripts and other programs name themselves (--name) and may pick a colour.
+  if (ev.agent_name) a.agentName = String(ev.agent_name).slice(0, 40);
+  if (ev.color && /^#?[\da-f]{6}$/i.test(ev.color)) a.color = ev.color.startsWith('#') ? ev.color : '#' + ev.color;
   const wasDone = a.status === 'done';
 
   switch (ev.hook_event_name) {
@@ -1087,6 +1093,12 @@ function onAgentEvent(ev, fromPermission) {
       if (a.feed.length > 30) a.feed.shift();
       // Cursor only reports a step after it's done, so show that step; others move on to "Thinking".
       a.step = a.agent === 'cursor' ? describeStep(ev.tool_name, ev.tool_input) : 'Thinking';
+      break;
+    case 'Step': // a script's own progress line (--event step --text ...)
+      state.dismissedAgents.delete(a.id);
+      if (a.status !== 'working') { a.status = 'working'; if (wasDone || !a.startedAt) a.startedAt = now; }
+      a.step = ev.message || 'Working';
+      a.feed.push({ tool: 'Step', text: a.step }); if (a.feed.length > 30) a.feed.shift();
       break;
     case 'Attention': // the agent is waiting for you in its own window (Gemini permission prompts)
       a.status = 'waiting'; a.step = ev.message || 'Waiting for you';

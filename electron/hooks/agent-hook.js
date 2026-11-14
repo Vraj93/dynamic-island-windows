@@ -21,7 +21,8 @@ const appData = process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roami
 const infoFile = path.join(appData, 'dynamic-island', 'agent-server.json');
 
 const arg = (name) => { const i = process.argv.indexOf('--' + name); return i > 0 ? process.argv[i + 1] : undefined; };
-const AGENT = arg('agent') || 'claude-code';
+// --name means a script or any other program reporting by itself (see custom() below).
+const AGENT = arg('name') != null && !arg('agent') ? 'custom' : arg('agent') || 'claude-code';
 const EVENT_ARG = arg('event');
 
 const cut = (s, n) => (typeof s === 'string' && s.length > n ? s.slice(0, n) + '…' : s);
@@ -50,6 +51,12 @@ function normInput(input) {
   if (file) out.file_path = cut(file, 300);
   if (command) out.command = cut(command, 600);
   for (const k of ['description', 'pattern', 'url', 'query']) if (typeof input[k] === 'string') out[k] = cut(input[k], 300);
+  // Edits: what was there and what replaces it (the island shows the first lines of the change).
+  const oldS = pick('old_string', 'oldString', 'old_str', 'old_text'), newS = pick('new_string', 'newString', 'new_str', 'new_text');
+  if (oldS != null) out.old_string = cut(oldS, 600);
+  if (newS != null) out.new_string = cut(newS, 600);
+  if (typeof input.content === 'string') out.content = cut(input.content, 600);
+  if (Array.isArray(input.edits) && input.edits[0]) out.edits = [{ old_string: cut(String(input.edits[0].old_string || ''), 600), new_string: cut(String(input.edits[0].new_string || ''), 600) }];
   return out;
 }
 
@@ -138,7 +145,26 @@ function post(info, route, payload, timeoutMs) {
   });
 }
 
+/* Any program or script, no setup:
+ *   "Dynamic Island.exe" --island --name "Nightly build" --event start|step|needs-you|done|error|end [--text "..."] [--id <run>]
+ * Calls with the same --id (default: the name) update the same island. */
+function custom() {
+  const name = cut(String(arg('name') || 'Script'), 40), text = cut(String(arg('text') || ''), 600);
+  const id = 'custom:' + String(arg('id') || name).slice(0, 80);
+  const base = { agent: 'custom', agent_name: name, session_id: id, cwd: arg('project') || '', at: Date.now(), color: arg('color') || '' };
+  switch (String(arg('event') || 'step').toLowerCase()) {
+    case 'start': return { ...base, hook_event_name: 'UserPromptSubmit', prompt: text || name };
+    case 'step': case 'progress': return { ...base, hook_event_name: 'Step', message: text || 'Working' };
+    case 'needs-you': case 'attention': case 'waiting': return { ...base, hook_event_name: 'Attention', message: text || 'Needs you' };
+    case 'done': case 'finished': case 'success': return { ...base, hook_event_name: 'Stop', last_assistant_message: text };
+    case 'error': case 'failed': case 'fail': return { ...base, hook_event_name: 'StopFailure', message: text || 'Failed' };
+    case 'end': case 'clear': return { ...base, hook_event_name: 'SessionEnd' };
+  }
+  return null;
+}
+
 async function readInput() {
+  if (AGENT === 'custom') return {};
   if (AGENT === 'codex') return parseMaybe(process.argv[process.argv.length - 1]); // Codex passes JSON as an argument
   let raw = '';
   for await (const chunk of process.stdin) raw += chunk;
@@ -148,7 +174,7 @@ async function readInput() {
 async function main() {
   const raw = await readInput();
   if (!raw || typeof raw !== 'object') return;
-  const ev = normalize(raw);
+  const ev = AGENT === 'custom' ? custom() : normalize(raw);
   if (!ev || !ev.hook_event_name) return;
   let info;
   try { info = JSON.parse(fs.readFileSync(infoFile, 'utf8')); } catch { return; } // island not running

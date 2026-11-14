@@ -9,7 +9,9 @@
 // Hook mode: AI agents run the island's own program as their hook, so no Node.js is needed on the PC.
 //   "Dynamic Island.exe" --agent-hook --agent <name> [...]   (reads the agent's event, reports it, exits; no window)
 // The same mode is the universal command for any other agent or script (--name, --event, --text).
-if (process.argv.includes('--agent-hook')) {
+// Hook mode: agents run this app as their hook, and any script can post to the island:
+//   "Dynamic Island.exe" --island --name "My build" --event done --text "All tests passed"
+if (process.argv.includes('--agent-hook') || process.argv.includes('--island')) {
   require('./hooks/agent-hook.js');
   return;
 }
@@ -397,6 +399,8 @@ ipcMain.handle('app-info', () => ({
   version: app.getVersion(),
   electron: process.versions.electron,
   packaged: app.isPackaged,
+  // The command any script uses to post to the island.
+  islandCmd: `"${process.execPath}"${app.isPackaged ? '' : ` "${app.getAppPath()}"`} --island`,
   dataFolder: app.getPath('userData'),
 }));
 
