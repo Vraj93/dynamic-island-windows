@@ -183,6 +183,14 @@ const SECTIONS = {
       ${item('hudBrightness', 'Brightness', 'Level bar when a laptop screen\'s brightness changes.')}
       ${item('hudCaps', 'Caps Lock', 'Shows when Caps Lock turns on or off.')}
       ${item('hudBattery', 'Charger and low battery', 'Charging / on battery when you plug in or unplug, and a warning at 15% and 5%.')}
+    </div>
+    <div class="sec">Calls and privacy</div>
+    <div class="card">
+      ${item('callTimer', 'Call timer', 'While an app is using your microphone (Teams, Zoom, Discord, Meet in a browser…), the island shows how long, with a mute button.')}
+      <div class="item"><div class="t"><div class="n">Microphone mute key</div><div class="s">Mutes or unmutes the microphone in Windows itself, so in every app at once. Works even when another app is in front.</div></div>
+        <div class="seg">${[['', 'Off'], ['Ctrl+Alt+M', 'Ctrl+Alt+M'], ['Ctrl+Shift+M', 'Ctrl+Shift+M'], ['Ctrl+Alt+F9', 'Ctrl+Alt+F9']].map(([v, n]) => `<button class="${(S.micKey || '') === v ? 'on' : ''}" data-mickey="${v}">${n}</button>`).join('')}</div></div>
+      ${S.micKey && micKeyActive !== null && micKeyActive !== S.micKey ? `<div class="item"><div class="t"><div class="s" style="color:#ff9f0a">Another app on this PC already uses ${esc(S.micKey)}, so ${micKeyActive ? `<b>${esc(micKeyActive)}</b> works instead` : 'no key could be set'}. Pick another above if you like.</div></div></div>` : ''}
+      ${item('privacyDots', 'Microphone, camera and screen-capture dots', 'A small dot on the island while any app uses them: orange for the microphone, green for the camera, blue for screen capture.')}
     </div>`,
 
   about: () => `<h1>About</h1><p class="lead">Dynamic Island for Windows${info.version ? ' · version ' + esc(info.version) : ''}.</p>
@@ -222,6 +230,12 @@ document.addEventListener('click', async (e) => {
     const r = await host.invoke('agent-hooks', { cmd: ag.dataset.cmd, agent: ag.dataset.agent });
     agentError[ag.dataset.agent] = r && r.ok === false ? r.error : '';
     await refreshClaude();
+    return;
+  }
+  const mk = e.target.closest('[data-mickey]');
+  if (mk) {
+    host.send({ type: 'set-setting', key: 'micKey', value: mk.dataset.mickey });
+    setTimeout(refreshMicKey, 300);
     return;
   }
   const cp = e.target.closest('[data-copy]');
@@ -282,6 +296,8 @@ document.addEventListener('change', (e) => {
 document.addEventListener('toggle', (e) => { if (e.target.classList && e.target.classList.contains('adv')) advOpen = e.target.open; }, true);
 document.addEventListener('keydown', (e) => { if (e.key === 'Enter' && (e.target.id === 'icsUrl' || e.target.id === 'icsName')) document.querySelector('[data-savelink]').click(); });
 
+let micKeyActive = null;
+async function refreshMicKey() { micKeyActive = (await host.invoke('mic-key-ok')) || ''; if (section === 'popups') draw(); }
 let cal = null, calBusy = '', calError = '', linkOpen = false, advOpen = false;
 // Don't redraw under the user's typing (calendar links, app IDs).
 const typing = () => document.activeElement && /^(INPUT|SELECT)$/.test(document.activeElement.tagName);
@@ -294,6 +310,7 @@ host.onMessage((m) => {
   S = await host.invoke('get-settings');
   info = await host.invoke('app-info');
   cal = await host.invoke('cal', { op: 'state' });
+  refreshMicKey();
   if (!SECTIONS[section]) section = 'general';
   draw();
   refreshClaude();

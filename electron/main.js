@@ -16,7 +16,7 @@ if (process.argv.includes('--agent-hook') || process.argv.includes('--island')) 
   return;
 }
 
-const { app, BrowserWindow, Tray, Menu, ipcMain, screen, nativeImage, session, desktopCapturer, clipboard, shell, dialog, powerMonitor } = require('electron');
+const { app, BrowserWindow, Tray, Menu, ipcMain, screen, nativeImage, session, desktopCapturer, clipboard, shell, dialog, powerMonitor, globalShortcut } = require('electron');
 const calendar = require('./calendar.js');
 const lyrics = require('./lyrics.js');
 const path = require('path');
@@ -102,6 +102,8 @@ ipcMain.on('ui', (_e, msg) => {
       if (lastMedia) send(lastMedia);
       if (lastFullscreen) send(lastFullscreen);
       send(calendar.snapshot());
+      if (lastPrivacy) send(lastPrivacy);
+      send({ type: 'mic-key-active', key: micKeyOn });
       // Development only: ISLAND_TEST_SCRIPT=<file.js> runs that script in the UI (used to test drag-and-drop screens).
       if (process.env.ISLAND_TEST_SCRIPT && fs.existsSync(process.env.ISLAND_TEST_SCRIPT)) {
         win.webContents.executeJavaScript(fs.readFileSync(process.env.ISLAND_TEST_SCRIPT, 'utf8')).catch((e) => log('test script: ' + e.message));
@@ -191,6 +193,7 @@ function startMedia() {
         if (m.type === 'media') { lastMedia = m; send(m); mediaRestarts = 0; }
         else if (m.type === 'fullscreen') { lastFullscreen = m; send(m); log('fullscreen ' + m.on); }
         else if (m.type === 'sys') send(m);
+        else if (m.type === 'privacy') { lastPrivacy = m; send(m); }
         else if (m.type === 'media-error') log('media: ' + m.message);
       } catch { log('media (bad line): ' + line.slice(0, 120)); }
     }
@@ -206,8 +209,9 @@ function startMedia() {
   });
 }
 
+let lastPrivacy = null;
 function mediaCommand(cmd) {
-  if (!media || !/^(toggle|next|prev|seek [\d.]+|select [\w.!\-]+|volkeys (on|off))$/.test(String(cmd))) return;
+  if (!media || !/^(toggle|next|prev|seek [\d.]+|select [\w.!\-]+|volkeys (on|off)|mic (toggle|mute|unmute))$/.test(String(cmd))) return;
   media.stdin.write(cmd + '\n');
 }
 
@@ -311,6 +315,9 @@ const DEFAULT_SETTINGS = {
   chimes: true,           // sounds for timers, alarms, reminders, agents
   hideFullscreen: true,   // step aside for full-screen video and games (alerts still show)
   startWithWindows: false,
+  micKey: 'Ctrl+Alt+M',   // mutes the microphone in every app ('' = off)
+  callTimer: true,        // timer in the island while an app is using the microphone
+  privacyDots: true,      // dots while the microphone, camera or screen capture is in use
   calAlert: 5,            // minutes before an event the island tells you (0 = off)
   reminderSync: '',       // account id whose Google Tasks / Microsoft To Do your reminders sync with ('' = this PC only)
   // which tools appear in the utility sheet, in the order you put them
@@ -343,6 +350,7 @@ function saveSettings() {
 }
 function setSetting(key, value) {
   if (!(key in DEFAULT_SETTINGS) || typeof value !== typeof DEFAULT_SETTINGS[key]) return;
+  if (key === 'micKey' && value && !/^((Ctrl|Alt|Shift|Win)\+){1,3}([A-Z0-9]|F[1-9]|F1[0-2])$/.test(value)) return;
   if (key === 'calAlert') value = [0, 1, 2, 5, 10, 15, 30].includes(value) ? value : 5;
   if (key === 'hoverDelay') value = Math.max(0, Math.min(1500, Math.round(value / 50) * 50));
   if (key === 'tiles') {
@@ -365,6 +373,7 @@ function applySettings(s) {
   clipEnabled = s.clipboard !== false;
   if (!clipEnabled) clipHistory = [];
   mediaCommand(s.volumeKeys === false ? 'volkeys off' : 'volkeys on');
+  applyMicKey(s.micKey);
   // Start with Windows: run this same Electron with this app folder (works with Smart App Control on).
   try {
     const args = loginArgs();
@@ -394,6 +403,26 @@ function openSettings(section) {
   settingsWin.once('ready-to-show', () => settingsWin.show());
   settingsWin.on('closed', () => { settingsWin = null; });
 }
+/* Microphone mute key: works everywhere, even when another app has focus. */
+let micKeyOn = '', micKeyWanted = null;
+function applyMicKey(key) {
+  const accel = String(key || '').replace(/\bWin\b/, 'Super');
+  if (accel === micKeyWanted) return; // already set up for this choice (maybe on the fallback key)
+  micKeyWanted = accel;
+  if (micKeyOn) { try { globalShortcut.unregister(micKeyOn); } catch { /* fine */ } }
+  micKeyOn = '';
+  if (!accel) return;
+  try {
+    const press = () => { mediaCommand('mic toggle'); send({ type: 'mic-key' }); };
+    // If another app already owns the key, fall back to Ctrl+Alt+F9 (and say so in Settings).
+    for (const k of [accel, 'Ctrl+Alt+F9']) {
+      if (globalShortcut.register(k, press)) { micKeyOn = k; break; }
+      log('mic key ' + k + ' is taken by another app');
+    }
+  } catch (e) { log('mic key: ' + e.message); }
+  send({ type: 'mic-key-active', key: micKeyOn });
+}
+ipcMain.handle('mic-key-ok', () => micKeyOn);
 ipcMain.handle('get-settings', () => settings);
 ipcMain.handle('app-info', () => ({
   version: app.getVersion(),

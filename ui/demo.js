@@ -70,6 +70,9 @@
       render('sheet');
     },
     player() { music(); render('mediaExpanded'); },
+    call() { music(); state.priv = { mic: [{ app: 'Teams', since: now - 754000 }], cam: [{ app: 'Teams', since: now - 700000 }], screen: [], micMuted: 0 }; render('callCompact'); },
+    callmuted() { state.priv = { mic: [{ app: 'Zoom', since: now - 1912000 }], cam: [], screen: [{ app: 'Zoom', since: now - 60000 }], micMuted: 1 }; render('callExpanded'); },
+    camdot() { music(); state.priv = { mic: [], cam: [{ app: 'WindowsCamera', since: now - 9000 }], screen: [], micMuted: 0 }; render('mediaCompact'); },
     lyrics() {
       music(); state.lyricsOpen = true;
       const words = ['City lights are fading slow', 'Engine humming soft and low', 'Every mile a quiet song', 'We were never lost for long',

@@ -103,6 +103,27 @@ public static class IslandSys {
             return (int)Math.Round(l * 100);
         } catch { vol = null; return -1; }
     }
+    // Microphone mute, in Windows itself, so it applies to every app: the default mic for calls and for everything else.
+    static IAudioEndpointVolume Mic(int role) {
+        var e = (IMMDeviceEnumerator)new MMDeviceEnumeratorCom();
+        IMMDevice d; if (e.GetDefaultAudioEndpoint(1 /* capture */, role, out d) != 0 || d == null) return null;
+        Guid iid = typeof(IAudioEndpointVolume).GUID; object o;
+        d.Activate(ref iid, 23, IntPtr.Zero, out o);
+        return (IAudioEndpointVolume)o;
+    }
+    // 1 = muted, 0 = live, -1 = no microphone
+    public static int MicMuted() {
+        try { var v = Mic(2) ?? Mic(0); if (v == null) return -1; bool m; v.GetMute(out m); return m ? 1 : 0; } catch { return -1; }
+    }
+    public static int SetMic(int mode) { // mode: 1 mute, 0 unmute, 2 toggle
+        try {
+            int cur = MicMuted(); if (cur < 0) return -1;
+            bool want = mode == 2 ? cur == 0 : mode == 1;
+            Guid ctx = Guid.Empty;
+            foreach (var role in new[] { 0, 2 }) { var v = Mic(role); if (v != null) v.SetMute(want, ref ctx); }
+            return want ? 1 : 0;
+        } catch { return -1; }
+    }
 }
 
 // Volume keys: on Windows 11 the only dependable way to stop Windows' own volume pop-up from
@@ -312,6 +333,12 @@ function Run-Command([string]$line) {
     $parts = $line.Trim() -split '\s+', 2
     if ($parts[0] -eq 'select') { $script:preferred = $parts[1]; $script:lastKey = ''; return }
     if ($parts[0] -eq 'volkeys') { [IslandKeys]::Enabled = ($parts[1] -eq 'on'); return }
+    if ($parts[0] -eq 'mic') {
+        $mode = switch ($parts[1]) { 'mute' { 1 } 'unmute' { 0 } default { 2 } }
+        $r = [IslandSys]::SetMic($mode)
+        Out-Json @{ type = 'media-error'; message = "mic $($parts[1]) -> $(switch ($r) { 1 { 'muted' } 0 { 'live' } default { 'no microphone' } })" }
+        $script:privLast = ''; Publish-Privacy; return
+    }
     $s = Get-Session
     if (-not $s) { return }
     switch ($parts[0]) {
@@ -320,6 +347,37 @@ function Run-Command([string]$line) {
         'prev'   { $null = Await ($s.TrySkipPreviousAsync()) ([bool]) }
         'seek'   { $ticks = [long]([double]$parts[1] * 10000000); $null = Await ($s.TryChangePlaybackPositionAsync($ticks)) ([bool]) }
     }
+}
+
+# Who is using the microphone, camera or screen capture right now. Windows records it per app under
+# CapabilityAccessManager\ConsentStore: an app is using it while LastUsedTimeStart is set and LastUsedTimeStop is 0.
+$privLast = ''
+$consent = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore'
+function Users-Of([string]$cap) {
+    $out = @()
+    foreach ($root in @("$consent\$cap", "$consent\$cap\NonPackaged")) {
+        if (-not (Test-Path $root)) { continue }
+        foreach ($k in Get-ChildItem $root -ErrorAction SilentlyContinue) {
+            if ($k.PSChildName -eq 'NonPackaged') { continue }
+            $start = $k.GetValue('LastUsedTimeStart'); $stop = $k.GetValue('LastUsedTimeStop')
+            if (-not $start -or $stop -ne 0) { continue }
+            $n = $k.PSChildName
+            if ($n -match '#') { $n = ($n -split '#')[-1] -replace '\.exe$', '' } else { $n = (($n -split '_')[0] -split '\.')[-1] }
+            if ($n -match '^(Dynamic Island|electron)$') { continue }   # the island itself (sound bars)
+            $ms = [long](([DateTime]::FromFileTimeUtc([long]$start) - [DateTime]'1970-01-01').TotalMilliseconds)
+            $out += @{ app = $n; since = $ms }
+        }
+    }
+    , $out
+}
+function Publish-Privacy {
+    $mic = @(Users-Of 'microphone'); $cam = @(Users-Of 'webcam')
+    $scr = @(Users-Of 'graphicsCaptureProgrammatic') + @(Users-Of 'graphicsCaptureWithoutBorder')
+    $muted = [IslandSys]::MicMuted()
+    $key = ((@($mic) + @($cam) + @($scr) | ForEach-Object { "$($_.app)$($_.since)" }) -join ',') + "|$muted"
+    if ($key -eq $script:privLast) { return }
+    $script:privLast = $key
+    Out-Json @{ type = 'privacy'; mic = @($mic); cam = @($cam); screen = @($scr); micMuted = $muted }
 }
 
 # [Console]::In.ReadLineAsync() blocks in Windows PowerShell; a StreamReader over the raw stream does not.
@@ -343,6 +401,7 @@ while ($true) {
             if ($fs -ne $lastFullscreen) { $lastFullscreen = $fs; Out-Json @{ type = 'fullscreen'; on = $fs } }
             Publish
         }
+        if (($tickCount % 8) -eq 1) { Publish-Privacy }
     } catch {
         Out-Json @{ type = 'media-error'; message = "$($_.Exception.Message)" }
         Start-Sleep -Milliseconds 1500

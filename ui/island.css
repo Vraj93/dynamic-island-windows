@@ -297,3 +297,12 @@ button.src:hover{background:rgba(255,255,255,.16)}
 .mright .lyrlist p{font-size:22px}
 .mright .lyrbtn{width:32px;height:32px}
 .mright .lyrsrc{top:10px;bottom:auto;right:14px;font-size:11px;opacity:.7}
+/* calls and privacy */
+.callic{width:26px;height:26px;border-radius:13px;background:rgba(48,209,88,.18);color:#30d158;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.callic.off{background:rgba(255,69,58,.18);color:#ff6b6b}
+.callic.big{width:40px;height:40px;border-radius:20px}
+.callmute{width:28px;height:28px;border-radius:14px;border:0;background:rgba(255,255,255,.1);color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0;margin-left:2px}
+.callmute:hover{background:rgba(255,255,255,.2)}
+.callmute.on{background:#ff453a}
+.pdots{position:absolute;top:7px;right:14px;display:flex;gap:4px;pointer-events:none;z-index:3}
+.pdots i{width:6px;height:6px;border-radius:3px;box-shadow:0 0 6px currentColor}
