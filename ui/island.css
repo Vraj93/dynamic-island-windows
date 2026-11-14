@@ -212,3 +212,11 @@ button.src:hover{background:rgba(255,255,255,.16)}
 .btn.join:hover{filter:brightness(1.08)}
 .x.spin svg{animation:spin 1s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
+.cev.mine{cursor:pointer;transition:background .15s}
+.cev.mine:hover{background:rgba(255,255,255,.09)}
+.callday[data-act]{cursor:pointer}
+.cdays .chip{flex-shrink:0}
+.cdays::-webkit-scrollbar{height:0}
+.cdot{width:26px;height:26px;border-radius:50%;border:0;cursor:pointer;padding:0;transition:transform .15s}
+.cdot:hover{transform:scale(1.1)}
+.cdot.on{box-shadow:0 0 0 2px #000,0 0 0 4px #fff}

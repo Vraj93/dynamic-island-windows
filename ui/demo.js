@@ -53,6 +53,14 @@
     sheet() { music(); calendar(); render('sheet'); },
     calendar() { calendar(); render('calendar'); },
     calempty() { render('calendar'); },
+    calnew() { C.local = []; actions.calNew(); C.edit.title = 'Dinner with Maya'; render('calEdit'); },
+    callocal() {
+      const type = (t) => { document.querySelector('#calTitle').value = t; };
+      C.local = []; actions.calNew(); type('Dentist'); actions.calSave();
+      actions.calNew(); type('Mom\'s birthday'); actions.calDur(0); actions.calColor('#ff6fae'); actions.calSave();
+      actions.calEdit(C.local[0].id); actions.calDur(30); actions.calSave(); // editing keeps the same event
+      render('calendar');
+    },
     event() { calendar(); C.alert = { ev: C.events.find((e) => e.id === 'd'), phase: 'soon' }; C.alert.ev.start = now + 4.2 * 6e4; render('eventSoon'); },
     netflix() {
       music();

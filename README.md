@@ -60,7 +60,7 @@ switching between apps. A timer gets its own small island next to the music. Rig
 
 ## Calendar
 
-Sign in with **Google** or **Microsoft** (Outlook.com, Hotmail, Microsoft 365), or paste any **calendar link** (.ics / webcal).
+Works on its own: add events right in the island and they stay on your PC. Optionally sign in with **Google** or **Microsoft** (Outlook.com, Hotmail, Microsoft 365), or paste any **calendar link** (.ics / webcal).
 Your week shows in the sheet, and a heads-up drops down a few minutes before each event, with a **Join** button for
 Meet, Teams and Zoom. Reminders can sync both ways with **Google Tasks** or **Microsoft To Do**, so they reach your phone.
 Sign-in happens in your own browser; tokens are encrypted with Windows' data protection and stay on your PC.

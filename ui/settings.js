@@ -102,8 +102,8 @@ const SECTIONS = {
     const pending = calBusy ? `<div class="item"><div class="t"><div class="n">${esc(calBusy)}</div><div class="s">Finish signing in in the browser window that opened. The island never sees your password.</div></div><button class="btn" data-cancel-login>Cancel</button></div>` : '';
     const lead = S.calAlert == null ? 5 : S.calAlert;
     const syncTo = c.accounts.filter((a) => a.provider !== 'ics');
-    return `<h1>Calendar</h1><p class="lead">Your events in the sheet, and a heads-up in the island before each one, with a Join button for Meet, Teams and Zoom. Reminders can sync with Google Tasks or Microsoft To Do, so they reach your phone too.</p>
-    <div class="sec">Accounts</div>
+    return `<h1>Calendar</h1><p class="lead">The calendar works on its own: add events from the island's Calendar tool and they stay on this PC, with a heads-up before each one. Connecting an account is optional. It adds your Google or Outlook events (with a Join button for Meet, Teams and Zoom), and can sync reminders with Google Tasks or Microsoft To Do so they reach your phone.</p>
+    <div class="sec">Accounts (optional)</div>
     <div class="card">${accts || '<div class="item"><div class="t"><div class="s">No calendars connected yet.</div></div></div>'}${pending}</div>
     <div class="row-btns">
       <button class="btn big" data-login="google">${PROV.google[1]} Sign in with Google</button>
