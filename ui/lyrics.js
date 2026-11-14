@@ -96,3 +96,5 @@ render = function (name, opts) {
   lyrRender(name, opts);
   if (name === 'mediaExpanded' && state.lyricsOpen) requestAnimationFrame(() => followLyrics(true));
 };
+// Tapping the song row in the sheet opens the full player (its buttons still do their own thing).
+actions.openPlayer = () => render('mediaExpanded');

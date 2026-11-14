@@ -45,7 +45,7 @@ const state = {
 };
 const HUD_MS = 1800;
 // Preferences from the Settings window (kept in sync by tools.js).
-const prefs = { media: true, mediaPeek: true, lyrics: true, hideFullscreen: true, chimes: true, hudVolume: true, hudBrightness: true, hudCaps: true, hudBattery: true,
+const prefs = { media: true, mediaPeek: true, lyrics: true, findCovers: true, hideFullscreen: true, chimes: true, hudVolume: true, hudBrightness: true, hudCaps: true, hudBattery: true,
   tiles: ['calendar', 'timer', 'alarm', 'focus', 'reminder', 'note', 'clipboard', 'shelf', 'convert'] };
 const mediaKey = (x) => (x && x.active ? `${x.source}|${x.title}|${x.artist}` : '');
 const DONE_SHOW_MS = 90 * 1000; // a finished agent stays in the island this long
@@ -173,6 +173,7 @@ function extractColor(src) {
     const fromBrowser = /chrome|msedge|edge|firefox|308046B0AF4A39CB|opera|brave|vivaldi/i.test((state.media && state.media.source) || '');
     const ok = !(fromBrowser && Math.abs(img.naturalWidth - img.naturalHeight) <= 2 && img.naturalWidth <= 256);
     if (ok !== (state.mediaArtOk !== false)) { state.mediaArtOk = ok; if (/^media|sheet/.test(state.view)) render(state.view); }
+    if (!ok) findCover(state.media); // the browser's logo, not the song's cover: look for the real one
     if (!ok) {
       state.mediaColor = tileColor().startsWith('#') ? [1, 3, 5].map((i) => parseInt(tileColor().slice(i, i + 2), 16)).join(',') : '255,138,92';
       document.documentElement.style.setProperty('--mc', state.mediaColor);
@@ -298,7 +299,7 @@ const views = {
       </button>`).join('');
     const m = state.media;
     const strip = m && m.active && (m.title || m.artist) ? `
-      <div class="strip">
+      <div class="strip mstrip" data-act="openPlayer">
         <div class="art" style="width:44px;height:44px;${artStyle()}">${artInner()}</div>
         <div class="sp"><div class="f14 ell" style="font-weight:600">${esc(m.title)}</div><div class="d f12 ell">${esc(m.artist || sourceInfo(m.source).name)}</div></div>
         ${eq()}
@@ -962,7 +963,23 @@ function clearTimer() {
 
 /* ---------------- media updates ---------------- */
 let peekTimer = null;
+/* Missing covers (browsers often send none, or just their own logo): look the song up online once and use that.
+ * The found cover stays for this song even though the browser keeps sending its logo. */
+state.found = null; // { key, from: what the app sent, url }
+function findCover(m) {
+  if (!host || prefs.findCovers === false || !m || !m.title || m.readOnly) return;
+  const key = mediaKey(m);
+  if (state.found && state.found.key === key) return;
+  state.found = { key, from: m.art || null, url: null };
+  host.invoke('cover', { title: m.title, artist: m.artist, album: m.album, duration: m.duration }).then((url) => {
+    if (!url || !state.found || state.found.key !== key) return;
+    state.found.url = url;
+    if (state.media && mediaKey(state.media) === key) onMedia({ ...state.media, art: state.found.from }); // re-apply with the cover
+  });
+}
 function onMedia(m) {
+  if (state.found && state.found.url && state.found.key === mediaKey(m) && (m.art || null) === state.found.from) m = { ...m, art: state.found.url, foundArt: true };
+  else if (m.active && !m.art) findCover(m);
   const prev = state.media;
   const newTrack = mediaKey(m) !== mediaKey(prev);
   if (m.active && m.status === 'Paused' && !(prev && prev.status === 'Paused' && !newTrack)) state.pausedSince = Date.now();

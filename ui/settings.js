@@ -141,6 +141,7 @@ const SECTIONS = {
     <div class="card">
       ${item('media', 'Show what\'s playing', 'Cover and sound bars in the island while music or video plays. Right-click the island to hide the current song.')}
       ${item('mediaPeek', 'Announce new songs', 'A short "Now playing" pop-up with the bigger cover when the track changes.', !S.media)}
+      ${item('findCovers', 'Find missing covers', 'When an app or website sends no cover (often music in a browser), the song\'s title and artist are looked up once in iTunes, Deezer and MusicBrainz to find it. Off: a letter tile instead.', !S.media)}
       ${item('lyrics', 'Lyrics', 'A lyrics button in the player. Only when you open it, the song\'s title, artist, album and length go to LRCLIB, a free lyrics library, once per song. Off: nothing about your music leaves your PC.', !S.media)}
       <div class="item" style="flex-wrap:wrap;gap:10px"><div class="t" style="flex-basis:100%"><div class="n">Lyrics sources</div>
         <div class="s">LRCLIB first (lyrics that scroll with the song), then lyrics.ovh (plain text). Optional: add your own free <b>Musixmatch</b> API key from developer.musixmatch.com for one more source; free keys show part of each song.</div></div>

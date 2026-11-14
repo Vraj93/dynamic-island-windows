@@ -19,6 +19,7 @@ if (process.argv.includes('--agent-hook') || process.argv.includes('--island')) 
 const { app, BrowserWindow, Tray, Menu, ipcMain, screen, nativeImage, session, desktopCapturer, clipboard, shell, dialog, powerMonitor, globalShortcut } = require('electron');
 const calendar = require('./calendar.js');
 const lyrics = require('./lyrics.js');
+const covers = require('./covers.js');
 const path = require('path');
 const fs = require('fs');
 const { spawn } = require('child_process');
@@ -308,6 +309,7 @@ const DEFAULT_SETTINGS = {
   mediaPeek: true,        // "Now playing" pop-up when the song changes
   liveBars: true,         // sound bars follow the real audio
   lyrics: true,           // lyrics button in the player (looks up lyrics only when you open it)
+  findCovers: true,       // look up a cover online when the app sends none (title + artist to iTunes / Deezer)
   musixmatchKey: '',      // optional: your own Musixmatch API key, an extra lyrics source
   agents: true,           // Claude Code status and approvals
   volumeKeys: true,       // island handles the volume keys (hides Windows' pop-up)
@@ -557,6 +559,8 @@ ipcMain.handle('claude-hooks', (_e, cmd) => {
 /* Calendar accounts, events and synced reminders (electron/calendar.js). */
 ipcMain.handle('cal', (_e, req) => calendar.handle(req));
 // Lyrics for the playing song (only when you open the lyrics drawer, and only if Lyrics is on in Settings).
+// Covers for songs that come without one (title and artist go to iTunes / Deezer search, once per song).
+ipcMain.handle('cover', (_e, song) => (settings.findCovers === false || !song ? null : covers.find(song)));
 ipcMain.handle('lyrics', (_e, song) => (settings.lyrics === false || !song ? { status: 'off' } : lyrics.find(song, { musixmatchKey: settings.musixmatchKey })));
 
 function createTray() {

@@ -308,3 +308,5 @@ button.src:hover{background:rgba(255,255,255,.16)}
 .pdots i{width:6px;height:6px;border-radius:3px;box-shadow:0 0 6px currentColor}
 .astrip{border:0;width:100%;cursor:pointer;font:inherit;color:inherit;transition:background .15s}
 .astrip:hover{background:rgba(255,255,255,.09)}
+.mstrip{cursor:pointer;transition:background .15s}
+.mstrip:hover{background:rgba(255,255,255,.09)}
