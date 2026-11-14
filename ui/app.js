@@ -413,16 +413,16 @@ const views = {
     const a = primaryAgent();
     if (a.status === 'error') {
       return {
-        html: `<div class="v compact" style="gap:10px;width:${AGENT_COMPACT_W}px">
+        html: `<div class="v compact" style="gap:10px">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ff6961" stroke-width="2.4" stroke-linecap="round" style="flex-shrink:0"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v5.5M12 16.5v.1"/></svg>
-          <span class="f13 sp ell"><b>${esc(agentName(a))}</b> <span style="color:#ff8a84">stopped · ${esc(a.answer)}</span></span></div>`,
+          <span class="f13 ell" style="max-width:260px"><b>${esc(agentName(a))}</b> <span style="color:#ff8a84">stopped · ${esc(a.answer)}</span></span></div>`,
         radius: 19,
       };
     }
     if (a.status === 'done') {
       return {
-        html: `<div class="v compact" style="gap:10px;width:${AGENT_COMPACT_W}px">${check()}
-          <span class="f13 sp ell"><b>${esc(a.project || agentName(a))}</b> <span style="color:#30d158">finished</span></span>
+        html: `<div class="v compact" style="gap:10px">${check()}
+          <span class="f13 ell" style="max-width:260px"><b>${esc(a.project || agentName(a))}</b> <span style="color:#30d158">finished</span></span>
           <span class="d f12">${fmtDur(a.doneAt - a.startedAt)}</span></div>`,
         radius: 19,
       };
@@ -430,9 +430,9 @@ const views = {
     if (a.status === 'waiting') {
       // Agents that can't be answered from the island (Gemini): point you to its window.
       return {
-        html: `<div class="v compact" style="gap:10px;width:${AGENT_COMPACT_W}px">
+        html: `<div class="v compact" style="gap:10px">
           <span class="dot" style="width:10px;height:10px;border-radius:50%;background:#ff9f0a"></span>
-          <span class="f13 sp ell"><b>${esc(agentName(a))}</b> <span style="color:#ffb340">needs you · answer in its window</span></span></div>`,
+          <span class="f13 ell" style="max-width:260px"><b>${esc(agentName(a))}</b> <span style="color:#ffb340">needs you · answer in its window</span></span></div>`,
         radius: 19,
         ring: { color: '#ff9f0a', rgb: '255,159,10' },
       };

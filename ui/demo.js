@@ -82,6 +82,7 @@
       render('mediaExpanded');
     },
     compact() { music(); timer(272); render('mediaCompact'); },
+    agentdone() { music(); agent('done'); state.agents.get('demo').agent = 'claude-code'; render('agentCompact'); },
     agent() { agent('working'); render('agentCompact'); },
     twothings() { music(); agent('working'); state.agents.get('demo').agent = 'claude-code'; render('agentCompact'); },
     finishedlong() { agent('done'); state.agents.get('demo').answer = Array.from({ length: 14 }, (_, i) => 'Line ' + (i + 1) + ' of a long answer from the agent, so the box has to scroll.').join(String.fromCharCode(10)); state.focusAgent = 'demo'; render('agentExpanded'); },
