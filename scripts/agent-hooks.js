@@ -15,12 +15,16 @@ const { execFileSync } = require('child_process');
 
 const HOME = os.homedir();
 const HOOK = path.resolve(__dirname, '..', 'electron', 'hooks', 'agent-hook.js');
-const NODE = process.versions.electron ? findNode() : process.execPath; // the hook needs a real Node.js
 const MARK = 'dynamic-island';
 
-function findNode() {
-  try { return execFileSync('where', ['node'], { encoding: 'utf8' }).split(/\r?\n/)[0].trim(); } catch { return 'node'; }
-}
+// What agents run as their hook. Inside the app: the island's own program in hook mode, so the PC needs no Node.js.
+// From the command line (npm scripts, development): Node.js with the hook script.
+let RUN = { exe: process.execPath, args: [HOOK] };
+function setRunner(exe, preArgs = []) { RUN = { exe, args: [...preArgs, '--agent-hook'] }; }
+const runArgs = (...a) => [...RUN.args, ...a];
+const q = (s) => `"${s}"`;
+const shellLine = (...a) => [q(RUN.exe), ...runArgs(...a).map((x) => (/[\s\\]/.test(x) ? q(x) : x))].join(' ');
+
 function onPath(cmd) {
   try { execFileSync('where', [cmd], { stdio: 'ignore' }); return true; } catch { return false; }
 }
@@ -42,7 +46,7 @@ function writeFile(file, text) {
   fs.writeFileSync(file, text);
 }
 const writeJson = (file, obj) => writeFile(file, JSON.stringify(obj, null, 2) + '\n');
-const mentionsUs = (o) => JSON.stringify(o || {}).includes('agent-hook.js') || JSON.stringify(o || {}).includes('claude-hook.js') || JSON.stringify(o || {}).includes(MARK);
+const mentionsUs = (o) => /agent-hook/.test(JSON.stringify(o || {})) || JSON.stringify(o || {}).includes('claude-hook.js') || JSON.stringify(o || {}).includes(MARK);
 
 /* Remove our entries from a "hooks" object shaped { Event: [ group, ... ] } where a group may hold "hooks": [...]. */
 function stripHooks(hooks) {
@@ -71,7 +75,7 @@ const AGENTS = {
       const events = { UserPromptSubmit: {}, PreToolUse: { matcher: '*' }, PostToolUse: { matcher: '*' }, PostToolUseFailure: { matcher: '*' },
         PermissionRequest: { matcher: '*', wait: true }, Stop: {}, StopFailure: {}, Notification: { matcher: 'idle_prompt' }, SessionEnd: {} };
       for (const [ev, o] of Object.entries(events)) {
-        const h = { type: 'command', command: NODE, args: [HOOK, '--agent', 'claude-code'], statusMessage: `Updating ${MARK}`, ...(o.wait ? { timeout: 60 } : { async: true }) };
+        const h = { type: 'command', command: RUN.exe, args: runArgs('--agent', 'claude-code'), statusMessage: `Updating ${MARK}`, ...(o.wait ? { timeout: 60 } : { async: true }) };
         (s.hooks[ev] = s.hooks[ev] || []).push({ ...(o.matcher ? { matcher: o.matcher } : {}), hooks: [h] });
       }
       writeJson(this.file, s);
@@ -88,7 +92,7 @@ const AGENTS = {
     connect() {
       const hooks = {};
       for (const ev of ['userPromptSubmitted', 'preToolUse', 'postToolUse', 'postToolUseFailure', 'permissionRequest', 'agentStop', 'sessionEnd']) {
-        hooks[ev] = [{ type: 'command', exec: NODE, args: [HOOK, '--agent', 'copilot', '--event', ev], timeoutSec: ev === 'permissionRequest' ? 60 : 5 }];
+        hooks[ev] = [{ type: 'command', exec: RUN.exe, args: runArgs('--agent', 'copilot', '--event', ev), timeoutSec: ev === 'permissionRequest' ? 60 : 5 }];
       }
       writeJson(this.file, { version: 1, hooks });
     },
@@ -103,7 +107,7 @@ const AGENTS = {
     connect() {
       const s = readJson(this.file);
       s.hooks = stripHooks(s.hooks || {});
-      const cmd = `"${NODE}" "${HOOK}" --agent gemini`;
+      const cmd = shellLine('--agent', 'gemini');
       for (const ev of ['BeforeAgent', 'BeforeTool', 'AfterTool', 'AfterAgent', 'Notification', 'SessionEnd']) {
         (s.hooks[ev] = s.hooks[ev] || []).push({ matcher: ev.endsWith('Tool') ? '.*' : '', hooks: [{ type: 'command', name: MARK, command: cmd, timeout: 5000 }] });
       }
@@ -122,7 +126,7 @@ const AGENTS = {
       s.version = s.version || 1;
       s.hooks = stripHooks(s.hooks || {});
       // Cursor runs hook commands through PowerShell on Windows; "&" runs the quoted node.exe path.
-      const cmd = `& "${NODE}" "${HOOK}" --agent cursor`;
+      const cmd = `& ${shellLine('--agent', 'cursor')}`;
       // Only events that report what happened: none of these can approve or block anything.
       for (const ev of ['beforeSubmitPrompt', 'postToolUse', 'postToolUseFailure', 'afterFileEdit', 'afterShellExecution', 'stop', 'sessionEnd']) {
         (s.hooks[ev] = s.hooks[ev] || []).push({ command: cmd, timeout: 5 });
@@ -142,7 +146,7 @@ const AGENTS = {
       if (text.includes(`# ${MARK}`)) return;
       // Codex allows a single "notify" program; don't replace one you already have.
       if (/^\s*notify\s*=/m.test(text)) throw new Error('Codex already has a "notify" program set in config.toml; leaving it as it is.');
-      const line = `# ${MARK}: tell Dynamic Island when a turn finishes\nnotify = ['${NODE}', '${HOOK}', '--agent', 'codex']\n`;
+      const line = `# ${MARK}: tell Dynamic Island when a turn finishes\nnotify = [${[RUN.exe, ...runArgs('--agent', 'codex')].map((x) => `'${x}'`).join(', ')}]\n`;
       // Top-level keys must come before the first [table] in TOML.
       const i = text.search(/^\s*\[/m);
       writeFile(this.file, i < 0 ? `${text}${text && !text.endsWith('\n') ? '\n' : ''}${line}` : `${text.slice(0, i)}${line}\n${text.slice(i)}`);
@@ -174,4 +178,4 @@ if (require.main === module) {
     else { console.log('Usage: node scripts/agent-hooks.js status | connect <agent> | disconnect <agent>'); process.exitCode = 1; }
   } catch (e) { console.log(JSON.stringify({ ok: false, error: e.message })); process.exitCode = 1; }
 }
-module.exports = { AGENTS, status };
+module.exports = { AGENTS, status, setRunner };

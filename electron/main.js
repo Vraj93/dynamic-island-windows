@@ -6,6 +6,14 @@
  *  - The mouse is watched for the top-edge "hover zone" that opens the utility sheet.
  * All coordinates here are Windows display pixels (DIP), the same unit as CSS pixels in the UI.
  */
+// Hook mode: AI agents run the island's own program as their hook, so no Node.js is needed on the PC.
+//   "Dynamic Island.exe" --agent-hook --agent <name> [...]   (reads the agent's event, reports it, exits; no window)
+// The same mode is the universal command for any other agent or script (--name, --event, --text).
+if (process.argv.includes('--agent-hook')) {
+  require('./hooks/agent-hook.js');
+  return;
+}
+
 const { app, BrowserWindow, Tray, Menu, ipcMain, screen, nativeImage, session, desktopCapturer, clipboard, shell, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
@@ -474,28 +482,29 @@ ipcMain.handle('pick-files', async () => {
   return r.canceled ? [] : r.filePaths;
 });
 
-/* ---------- Claude Code connection, from the settings panel ---------- */
-ipcMain.handle('claude-hooks', (_e, cmd) => new Promise((resolve) => {
-  if (!['connect', 'disconnect', 'status'].includes(cmd)) return resolve('');
-  const p = spawn(process.platform === 'win32' ? 'node.exe' : 'node', [path.join(UNPACKED_ROOT, 'scripts', 'claude-hooks.js'), cmd], { windowsHide: true });
-  let out = '';
-  p.stdout.on('data', (d) => { out += d; });
-  p.on('error', () => resolve('Could not run Node.js.'));
-  p.on('exit', () => resolve(out.trim()));
-}));
-
-/* All AI agents: which are installed / connected, and connect or disconnect one (scripts/agent-hooks.js). */
+/* ---------- AI agents: which are installed / connected; connect or disconnect one ----------
+ * Runs scripts/agent-hooks.js inside the app (no Node.js needed). The hooks it writes run this same program in
+ * hook mode ("Dynamic Island.exe --agent-hook ...", see the top of this file), so they work on any PC. */
 const AGENT_IDS = ['claude-code', 'copilot', 'gemini', 'cursor', 'codex'];
-ipcMain.handle('agent-hooks', (_e, req) => new Promise((resolve) => {
+function agentHooks() {
+  const m = require(path.join(UNPACKED_ROOT, 'scripts', 'agent-hooks.js'));
+  m.setRunner(process.execPath, app.isPackaged ? [] : [app.getAppPath()]);
+  return m;
+}
+ipcMain.handle('agent-hooks', (_e, req) => {
   const cmd = req && req.cmd, agent = req && req.agent;
-  if (!(cmd === 'status' || ((cmd === 'connect' || cmd === 'disconnect') && AGENT_IDS.includes(agent)))) return resolve(null);
-  const args = [path.join(UNPACKED_ROOT, 'scripts', 'agent-hooks.js'), cmd, ...(agent ? [agent] : [])];
-  const p = spawn(process.platform === 'win32' ? 'node.exe' : 'node', args, { windowsHide: true });
-  let out = '';
-  p.stdout.on('data', (d) => { out += d; });
-  p.on('error', () => resolve({ ok: false, error: 'Node.js is needed to connect agents.' }));
-  p.on('exit', () => { try { resolve(JSON.parse(out.trim())); } catch { resolve({ ok: false, error: out.trim() || 'Something went wrong.' }); } });
-}));
+  try {
+    const m = agentHooks();
+    if (cmd === 'status') return m.status();
+    if ((cmd === 'connect' || cmd === 'disconnect') && AGENT_IDS.includes(agent)) { m.AGENTS[agent][cmd](); return { ok: true, ...m.status()[agent] }; }
+  } catch (e) { return { ok: false, error: e.message }; }
+  return null;
+});
+// Older Settings pages asked about Claude Code only.
+ipcMain.handle('claude-hooks', (_e, cmd) => {
+  const m = agentHooks(), a = m.AGENTS['claude-code'];
+  try { if (cmd === 'connect' || cmd === 'disconnect') a[cmd](); return a.connected() ? 'connected' : 'not connected'; } catch (e) { return e.message; }
+});
 
 function createTray() {
   // tray.ico holds a separately drawn image for each size Windows uses (made by scripts/make-icons.ps1).
