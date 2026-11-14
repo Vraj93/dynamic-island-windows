@@ -16,9 +16,34 @@ rest the mouse on the top edge for a utility sheet, and the island appears on it
 - **Stays out of the way:** hides during full-screen video and games (alerts still show), never takes keyboard focus
   except in text boxes, clicks pass through everywhere except the island itself.
 
-## Run it
+## Install
 
-Needs Windows 10/11 and Node.js.
+Download `Dynamic-Island-Setup-<version>.exe` from the
+[Releases](https://github.com/Vraj93/dynamic-island-windows/releases) page and run it. The setup wizard shows the
+license, lets you pick the folder, and adds Start menu and desktop shortcuts. Uninstall from Windows Settings › Apps.
+
+The installer isn't code-signed yet, so:
+
+- **SmartScreen** may say "Windows protected your PC": click **More info** › **Run anyway**.
+- **Smart App Control** (if it's on) blocks unsigned apps completely. Use the "run from source" steps below instead,
+  or wait for the Microsoft Store version (Store apps are signed by Microsoft, which also removes the warnings).
+
+## Build the installer
+
+GitHub builds it: push a version tag and the [Build installer](.github/workflows/release.yml) workflow creates a
+release with the installer attached.
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+On a PC without Smart App Control you can also build locally with `npm run dist` (output in `dist/`).
+For the Microsoft Store, fill in the `appx` identity in `package.json` from Partner Center and run `npm run dist:store`.
+
+## Run from source
+
+Needs Windows 10/11 and Node.js. Works with Smart App Control on.
 
 ```bash
 npm install
@@ -53,6 +78,10 @@ If the island isn't running, or you don't answer within 55 seconds, Claude Code 
 Windows Smart App Control blocks unsigned programs compiled on the PC. Electron and Windows PowerShell are trusted,
 so all Windows integration goes through PowerShell (which can still call Windows APIs). No ffmpeg either: the
 converter only uses what ships with Windows.
+
+## License
+
+[MIT](LICENSE): free to use, change and share, including commercially, as long as the copyright notice stays.
 
 ## Limits
 

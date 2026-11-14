@@ -11,6 +11,13 @@ const path = require('path');
 const fs = require('fs');
 const { spawn } = require('child_process');
 const http = require('http');
+
+// Inside an installed app this file lives in app.asar. Scripts run by PowerShell or Node must be real
+// files on disk, so they're shipped "unpacked" next to it; these paths point there.
+const UNPACKED = __dirname.replace(/app\.asar(?=[\\/]|$)/, 'app.asar.unpacked');
+const UNPACKED_ROOT = path.resolve(UNPACKED, '..');
+// Start with Windows: the installed app starts itself; in development, Electron starts this folder.
+const loginArgs = () => (app.isPackaged ? [] : [path.resolve(__dirname, '..')]);
 const crypto = require('crypto');
 
 const WIN_W = 1000;           // big enough for the largest panel plus its shadow
@@ -140,7 +147,7 @@ let lastMedia = null;
 let lastFullscreen = null;
 
 function startMedia() {
-  const script = path.join(__dirname, 'media.ps1');
+  const script = path.join(UNPACKED, 'media.ps1');
   media = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', script], { windowsHide: true });
   let buf = '';
   media.stdout.setEncoding('utf8');
@@ -265,7 +272,7 @@ function applySettings(s) {
   mediaCommand(s.volumeKeys === false ? 'volkeys off' : 'volkeys on');
   // Start with Windows: run this same Electron with this app folder (works with Smart App Control on).
   try {
-    const args = [path.resolve(__dirname, '..')];
+    const args = loginArgs();
     // Earlier builds registered under Electron's default name; remove that so there's only one entry.
     app.setLoginItemSettings({ openAtLogin: false, path: process.execPath, args, name: 'electron.app.Electron' });
     app.setLoginItemSettings({ openAtLogin: !!s.startWithWindows, path: process.execPath, args, name: 'Dynamic Island' });
@@ -288,7 +295,7 @@ ipcMain.on('shelf-drag', async (e, filePath) => {
   if (!icon) { try { icon = await app.getFileIcon(filePath, { size: 'normal' }); } catch { icon = nativeImage.createFromPath(path.join(__dirname, '..', 'assets', 'tray.png')); } }
   e.sender.startDrag({ file: filePath, icon });
 });
-ipcMain.handle('login-item', () => app.getLoginItemSettings({ path: process.execPath, args: [path.resolve(__dirname, '..')], name: 'Dynamic Island' }).openAtLogin);
+ipcMain.handle('login-item', () => app.getLoginItemSettings({ path: process.execPath, args: loginArgs(), name: 'Dynamic Island' }).openAtLogin);
 
 /* ---------- file converter ---------- */
 const IMAGE_IN = /\.(jpe?g|png|bmp|gif|tiff?|heic|heif|webp|ico|jxr)$/i;
@@ -303,7 +310,7 @@ function uniqueOut(file, ext) {
 
 function runConvert(mode, input, output, format, quality) {
   return new Promise((resolve) => {
-    const args = ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', path.join(__dirname, 'convert.ps1'),
+    const args = ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', path.join(UNPACKED, 'convert.ps1'),
       '-Mode', mode, '-In', input, '-Out', output, '-Format', format, '-Quality', String(quality || 90)];
     const p = spawn('powershell.exe', args, { windowsHide: true });
     let last = null, buf = '';
@@ -371,7 +378,7 @@ ipcMain.handle('pick-files', async () => {
 /* ---------- Claude Code connection, from the settings panel ---------- */
 ipcMain.handle('claude-hooks', (_e, cmd) => new Promise((resolve) => {
   if (!['connect', 'disconnect', 'status'].includes(cmd)) return resolve('');
-  const p = spawn(process.platform === 'win32' ? 'node.exe' : 'node', [path.join(__dirname, '..', 'scripts', 'claude-hooks.js'), cmd], { windowsHide: true });
+  const p = spawn(process.platform === 'win32' ? 'node.exe' : 'node', [path.join(UNPACKED_ROOT, 'scripts', 'claude-hooks.js'), cmd], { windowsHide: true });
   let out = '';
   p.stdout.on('data', (d) => { out += d; });
   p.on('error', () => resolve('Could not run Node.js.'));

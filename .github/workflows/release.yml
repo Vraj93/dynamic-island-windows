@@ -1,0 +1,48 @@
+# Builds the Windows installer on GitHub's own Windows machine and attaches it to a release.
+# Trigger: push a version tag, e.g.  git tag v0.1.0 && git push origin v0.1.0
+# Or run it by hand from the Actions tab (the installer is then saved as a build artifact only).
+name: Build installer
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write   # needed to create the release and upload the installer
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Build installer
+        run: npx electron-builder --win nsis --x64 --publish never
+
+      - name: Keep the installer as a build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Dynamic-Island-Setup
+          path: dist/*.exe
+
+      - name: Attach to the release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*.exe
+          generate_release_notes: true
+          body: |
+            Windows installer for Dynamic Island. Download `Dynamic-Island-Setup-*.exe` and run it.
+
+            The installer isn't code-signed yet, so Windows SmartScreen may say "Windows protected your PC":
+            click **More info** → **Run anyway**. On PCs with Smart App Control turned on, Windows blocks
+            unsigned apps entirely; the Microsoft Store version (coming) avoids this.

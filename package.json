@@ -1,17 +1,79 @@
 {
   "name": "dynamic-island",
+  "productName": "Dynamic Island",
   "version": "0.1.0",
   "description": "A Dynamic Island for Windows: media, timers, AI agent status and quick tools at the top of your screen.",
+  "author": "Vraj93",
+  "homepage": "https://github.com/Vraj93/dynamic-island-windows",
   "private": true,
   "main": "electron/main.js",
   "scripts": {
     "start": "electron .",
+    "dist": "electron-builder --win nsis --x64",
+    "dist:store": "electron-builder --win appx --x64",
     "connect-claude": "node scripts/claude-hooks.js connect",
     "disconnect-claude": "node scripts/claude-hooks.js disconnect",
     "claude-status": "node scripts/claude-hooks.js status"
   },
   "license": "MIT",
   "devDependencies": {
-    "electron": "^45.3.2"
+    "electron": "^45.3.2",
+    "electron-builder": "^26.18.0"
+  },
+  "build": {
+    "appId": "io.github.vraj93.dynamicisland",
+    "productName": "Dynamic Island",
+    "copyright": "Copyright © 2026 Vraj93",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "electron/**",
+      "ui/**",
+      "assets/**",
+      "scripts/**",
+      "package.json",
+      "LICENSE"
+    ],
+    "asarUnpack": [
+      "electron/*.ps1",
+      "electron/hooks/**",
+      "scripts/**"
+    ],
+    "win": {
+      "icon": "build/icon.png",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "Dynamic-Island-Setup-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "license": "build/license.txt",
+      "shortcutName": "Dynamic Island",
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "runAfterFinish": true,
+      "deleteAppDataOnUninstall": false
+    },
+    "appx": {
+      "displayName": "Dynamic Island",
+      "publisherDisplayName": "Vraj93",
+      "applicationId": "DynamicIsland",
+      "identityName": "REPLACE_WITH_PARTNER_CENTER_IDENTITY_NAME",
+      "publisher": "CN=REPLACE_WITH_PARTNER_CENTER_PUBLISHER_ID",
+      "backgroundColor": "#000000",
+      "languages": [
+        "en-US"
+      ]
+    }
   }
 }
