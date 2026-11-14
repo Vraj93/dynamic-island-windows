@@ -83,6 +83,7 @@
     },
     compact() { music(); timer(272); render('mediaCompact'); },
     agent() { agent('working'); render('agentCompact'); },
+    finishedlong() { agent('done'); state.agents.get('demo').answer = Array.from({ length: 14 }, (_, i) => 'Line ' + (i + 1) + ' of a long answer from the agent, so the box has to scroll.').join(String.fromCharCode(10)); state.focusAgent = 'demo'; render('agentExpanded'); },
     agentlive() { agent('working'); state.focusAgent = 'demo'; render('agentExpanded'); },
     approval() { agent('working'); state.approvals.push({ reqId: 'x', session: 'demo', tool: 'Bash', input: { command: 'npm install electron --save-dev' } }); render('approvalExpanded'); },
     finished() { agent('done'); state.focusAgent = 'demo'; render('agentExpanded'); },
