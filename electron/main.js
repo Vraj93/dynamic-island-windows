@@ -297,6 +297,8 @@ const DEFAULT_SETTINGS = {
   chimes: true,           // sounds for timers, alarms, reminders, agents
   hideFullscreen: true,   // step aside for full-screen video and games (alerts still show)
   startWithWindows: false,
+  // which tools appear in the utility sheet, in the order you put them
+  tiles: ['timer', 'alarm', 'stopwatch', 'focus', 'reminder', 'note', 'clipboard', 'shelf', 'convert'],
 };
 const settingsFile = () => path.join(app.getPath('userData'), 'settings.json');
 let settings = { ...DEFAULT_SETTINGS };
@@ -310,6 +312,11 @@ function saveSettings() {
 }
 function setSetting(key, value) {
   if (!(key in DEFAULT_SETTINGS) || typeof value !== typeof DEFAULT_SETTINGS[key]) return;
+  if (key === 'tiles') {
+    if (!Array.isArray(value)) return;
+    // known tools only, no duplicates, in the order chosen
+    value = value.filter((t, i) => DEFAULT_SETTINGS.tiles.includes(t) && value.indexOf(t) === i);
+  }
   settings[key] = value;
   saveSettings();
   applySettings(settings);

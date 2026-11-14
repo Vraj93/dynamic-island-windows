@@ -5,7 +5,8 @@
 const host = window.islandHost || {
   send() {}, onMessage() {},
   invoke: async (c) => (c === 'get-settings' ? { edgeTrigger: true, hoverDelay: 150, media: true, mediaPeek: true, liveBars: true, agents: true, volumeKeys: true,
-    hudVolume: true, hudBrightness: true, hudCaps: true, hudBattery: true, clipboard: true, chimes: true, hideFullscreen: true, startWithWindows: true }
+    hudVolume: true, hudBrightness: true, hudCaps: true, hudBattery: true, clipboard: true, chimes: true, hideFullscreen: true, startWithWindows: true,
+    tiles: ['timer', 'alarm', 'stopwatch', 'focus', 'reminder', 'note', 'clipboard', 'shelf', 'convert'] }
     : c === 'app-info' ? { version: '0.1.1' } : c === 'claude-hooks' ? 'Installed for: UserPromptSubmit, PreToolUse' : null),
 };
 let S = {};
@@ -17,6 +18,31 @@ const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': 
 const toggle = (key, label, disabled) => `<button class="tg${S[key] ? ' on' : ''}" data-key="${key}" role="switch" aria-checked="${!!S[key]}" aria-label="${esc(label)}" ${disabled ? 'disabled' : ''}><i></i></button>`;
 const item = (key, name, sub, disabled) => `<div class="item"><div class="t"><div class="n">${name}</div><div class="s">${sub}</div></div>${toggle(key, name, disabled)}</div>`;
 
+// The nine tools of the utility sheet. Shown ones come first, in their sheet order; hidden ones after.
+const TOOLS = {
+  timer: ['Timer', '255,159,10'], alarm: ['Alarm', '255,105,97'], stopwatch: ['Stopwatch', '255,214,10'],
+  focus: ['Focus', '191,140,255'], reminder: ['Reminder', '255,111,174'], note: ['Note', '99,230,190'],
+  clipboard: ['Clipboard', '100,210,255'], shelf: ['Shelf', '48,209,88'], convert: ['Convert', '64,200,224'],
+};
+const arrow = (d) => `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="${d}"/></svg>`;
+function toolRows() {
+  const shown = (S.tiles || []).filter((id) => TOOLS[id]);
+  const hidden = Object.keys(TOOLS).filter((id) => !shown.includes(id));
+  return [...shown, ...hidden].map((id) => {
+    const on = shown.includes(id), i = shown.indexOf(id);
+    const [name, rgb] = TOOLS[id];
+    return `<div class="item tool${on ? '' : ' off'}">
+      <span class="pos">${on ? i + 1 : ''}</span>
+      <span class="sw" style="background:rgb(${rgb})"></span>
+      <div class="t"><div class="n">${name}</div></div>
+      <button class="mv" data-move="${id}:-1" aria-label="Move ${name} up" title="Move up" ${on && i > 0 ? '' : 'disabled'}>${arrow('M6 15l6-6 6 6')}</button>
+      <button class="mv" data-move="${id}:1" aria-label="Move ${name} down" title="Move down" ${on && i < shown.length - 1 ? '' : 'disabled'}>${arrow('M6 9l6 6 6-6')}</button>
+      <button class="tg${on ? ' on' : ''}" data-tool="${id}" role="switch" aria-checked="${on}" aria-label="Show ${name} in the sheet"><i></i></button>
+    </div>`;
+  }).join('');
+}
+function setTiles(list) { host.send({ type: 'set-setting', key: 'tiles', value: list }); S.tiles = list; draw(); }
+
 const SECTIONS = {
   general: () => `<h1>General</h1><p class="lead">How the island behaves day to day.</p>
     <div class="card">
@@ -27,6 +53,9 @@ const SECTIONS = {
     </div>`,
 
   sheet: () => `<h1>Utility sheet</h1><p class="lead">The panel with the clock, battery and tools that drops down from the top edge.</p>
+    <div class="sec">Tools in the sheet</div>
+    <div class="card">${toolRows()}</div>
+    <div class="sec">Opening</div>
     <div class="card">
       ${item('edgeTrigger', 'Open when the mouse reaches the top edge', 'Rest the pointer at the top-centre of the main screen. The tray icon › Open utility sheet always works too.')}
       <div class="item"><div class="t"><div class="n">Hover delay</div><div class="s">How long the pointer rests on the edge before the sheet opens. Longer means fewer accidental openings.</div></div>
@@ -78,6 +107,18 @@ function draw() {
 document.addEventListener('click', async (e) => {
   const nav = e.target.closest('[data-sec]');
   if (nav) { section = nav.dataset.sec; draw(); if (section === 'agents') refreshClaude(); return; }
+  const tool = e.target.closest('[data-tool]');
+  if (tool) {
+    const id = tool.dataset.tool, list = (S.tiles || []).slice();
+    setTiles(list.includes(id) ? list.filter((x) => x !== id) : [...list, id]); // turning one on adds it at the end
+    return;
+  }
+  const mv = e.target.closest('[data-move]');
+  if (mv && !mv.disabled) {
+    const [id, d] = mv.dataset.move.split(':'), list = (S.tiles || []).slice(), i = list.indexOf(id), j = i + Number(d);
+    if (i >= 0 && j >= 0 && j < list.length) { [list[i], list[j]] = [list[j], list[i]]; setTiles(list); }
+    return;
+  }
   const tg = e.target.closest('.tg[data-key]');
   if (tg && !tg.disabled) { host.send({ type: 'set-setting', key: tg.dataset.key, value: !S[tg.dataset.key] }); return; }
   const d = e.target.closest('[data-delay]');

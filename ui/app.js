@@ -45,7 +45,8 @@ const state = {
 };
 const HUD_MS = 1800;
 // Preferences from the Settings window (kept in sync by tools.js).
-const prefs = { media: true, mediaPeek: true, hideFullscreen: true, chimes: true, hudVolume: true, hudBrightness: true, hudCaps: true, hudBattery: true };
+const prefs = { media: true, mediaPeek: true, hideFullscreen: true, chimes: true, hudVolume: true, hudBrightness: true, hudCaps: true, hudBattery: true,
+  tiles: ['timer', 'alarm', 'stopwatch', 'focus', 'reminder', 'note', 'clipboard', 'shelf', 'convert'] };
 const mediaKey = (x) => (x && x.active ? `${x.source}|${x.title}|${x.artist}` : '');
 const DONE_SHOW_MS = 90 * 1000; // a finished agent stays in the island this long
 
@@ -72,6 +73,7 @@ const I = {
   caps: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linejoin="round"><path d="M12 4l8 8h-4v4H8v-4H4z"/><path d="M8 20h8"/></svg>',
   bolt: '<svg width="18" height="18" viewBox="0 0 24 24" fill="#30d158"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg>',
   plug: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.7)" stroke-width="2" stroke-linecap="round"><path d="M9 3v5M15 3v5M6 8h12v3a6 6 0 0 1-12 0zM12 17v4"/></svg>',
+  gear: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>',
   close: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>',
   music: '<svg width="45%" height="45%" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/></svg>',
 };
@@ -247,7 +249,9 @@ const views = {
         <rect x="3" y="3" width="${Math.max(1.5, 20.5 * b.percent / 100)}" height="9" rx="2" fill="${b.percent <= 15 && !b.charging ? '#ff453a' : '#30d158'}"/>
         <rect x="27" y="5" width="2.2" height="5" rx="1.1" fill="rgba(255,255,255,.4)"/></svg>
         <span class="f13" style="font-weight:600">${b.percent}%${b.charging ? ' · charging' : ''}</span></div>` : '';
-    const tiles = TILES.map((t) => `
+    // Only the tools chosen in Settings, in the chosen order.
+    const shown = prefs.tiles.map((id) => TILES.find((t) => t.id === id)).filter(Boolean);
+    const tiles = shown.map((t) => `
       <button class="tile${t.ready ? '' : ' soon'}" data-act="tile" data-arg="${t.id}">
         <span class="ic" style="background:rgba(${t.color},.16);color:rgb(${t.color})">${t.icon}</span>
         <span><span class="t">${t.name}</span><span class="s">${t.id === 'timer' && state.timer ? 'Running · ' + fmt(timeLeft()) : t.sub}</span></span>
@@ -267,8 +271,9 @@ const views = {
         <div class="row" style="padding:0 4px">
           <div class="sp"><div class="big" style="font-size:34px" data-bind="clock">${clockText()}</div><div class="m f13" style="margin-top:6px">${date}</div></div>
           ${batt}
+          <button class="x" data-act="openSettings" aria-label="Settings" title="Settings" style="margin-left:6px">${I.gear}</button>
         </div>
-        <div class="grid">${tiles}</div>
+        ${shown.length ? `<div class="grid" style="grid-template-columns:repeat(${Math.min(3, shown.length)},minmax(0,1fr))">${tiles}</div>` : ''}
         ${strip}
         ${state.soon ? `<div class="soonmsg">${esc(state.soon)}</div>` : ''}
       </div>`,

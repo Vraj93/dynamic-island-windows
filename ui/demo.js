@@ -6,6 +6,9 @@
   if (window.islandHost) return;
   const scene = (location.hash.match(/demo=([\w-]+)/) || [, 'sheet'])[1];
   document.body.classList.add('demo');
+  // Optional: &tiles=note,timer,convert shows only those tools, in that order.
+  const tl = location.hash.match(/tiles=([\w,]+)/);
+  if (tl) prefs.tiles = tl[1].split(',');
 
   const cover = 'data:image/svg+xml,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 300">
     <defs><linearGradient id="g" x1="0" y1="0" x2="0.4" y2="1"><stop offset="0" stop-color="#ff8a4c"/><stop offset=".55" stop-color="#e23b6a"/><stop offset="1" stop-color="#4a1670"/></linearGradient></defs>
