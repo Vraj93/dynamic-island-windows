@@ -27,7 +27,7 @@ Music, calendar, timers, alarms, AI agent approvals, system pop-ups and quick to
 ## How it works
 
 Nothing sits on your screen while you're idle. Push the mouse to the **top-centre edge** and the utility sheet slides
-down. When something happens (a song starts, a timer runs, Claude Code needs you) a small island appears on its own,
+down. When something happens (a song starts, a timer runs, an AI agent needs you) a small island appears on its own,
 and grows into a full panel when you click it. Clicks pass straight through everywhere except the island, and it never
 steals your keyboard.
 
@@ -55,13 +55,13 @@ that move with the actual audio, drag to seek, switching between apps, and **lyr
 
 <img src="docs/images/agentlive.png" width="760" alt="Agent panel: big timer, the change being made, and Read / Edit / Test / Done">
 
-Claude Code, GitHub Copilot CLI, Gemini CLI, Cursor and Codex connect from Settings in one click, no Node.js needed.
+Coding agents installed on your PC connect from Settings › AI agents in one click, no Node.js needed.
 The panel shows how long it's been working, the code change it's making right now, and how far along it is.
 
 <table>
 <tr>
 <td width="50%"><img src="docs/images/approval.png" alt="Approving a command from the island"></td>
-<td width="50%"><img src="docs/images/finished.png" alt="Finished task with Claude's answer and what it changed"></td>
+<td width="50%"><img src="docs/images/finished.png" alt="Finished task with the agent's answer and what it changed"></td>
 </tr>
 <tr>
 <td><b>Allow or Deny</b> commands without hunting for the terminal window.</td>
@@ -202,15 +202,11 @@ npm start
 
 Quit from the tray icon near the clock. Turn on **Start with Windows** in Settings.
 
-### Connect Claude Code (optional)
+### Connect an AI agent (optional)
 
-```bash
-npm run connect-claude
-```
-
-Adds small hooks to `~/.claude/settings.json` (a backup is made first); undo with `npm run disconnect-claude`, or use
-Settings › AI agents. If the island isn't running, or you don't answer within 55 seconds, Claude Code shows its normal
-prompt.
+Open Settings › AI agents and press **Connect** next to the agent. It adds small hooks to that agent's own settings (a
+backup is made first); **Disconnect** removes them, and so does uninstalling the app. If the island isn't running, or
+you don't answer within 55 seconds, the agent asks you as usual.
 
 <br>
 
@@ -240,12 +236,12 @@ The design the app was built from. Click a board to see it full size.
 <br>
 
 - `electron/main.js`: the see-through, always-on-top window, top-edge trigger, click-through, tray, Settings window,
-  clipboard, shelf drag-out, the local server that Claude Code hooks talk to, and the converter.
+  clipboard, shelf drag-out, the local server that agent hooks talk to, and the converter.
 - `electron/media.ps1`: a Windows PowerShell helper for what Electron can't reach: now playing (Windows media controls),
   full-screen detection, volume and volume keys (Core Audio), brightness, Caps Lock.
 - `electron/convert.ps1`: file conversion with Windows' own components: Windows Imaging for pictures, Media Foundation
   for audio and video. PDFs come from Electron.
-- `electron/hooks/claude-hook.js` and `scripts/claude-hooks.js`: the Claude Code hook and its installer.
+- `electron/hooks/agent-hook.js` and `scripts/agent-hooks.js`: the agent hook and its installer.
 - `ui/`: the island itself in plain HTML, CSS and JavaScript. `app.js` (island, media, agents, pop-ups), `tools.js`
   (sheet tools), `settings.*` (Settings window), `demo.js` (sample screens for these screenshots).
 
@@ -279,7 +275,7 @@ from `scripts/make-icons.ps1`.
 
 - Media shows apps that report to Windows' media controls (Spotify, browsers, Windows Media Player, most store apps).
   **VLC 3 doesn't**, so it can't appear; when a site gives no artwork (Netflix) a letter tile is shown instead.
-- AI agents: Claude Code and GitHub Copilot CLI can be approved from the island; Gemini CLI shows a "needs you" alert
+- AI agents: some agents can be approved from the island (Allow / Deny), others only report what they do; Gemini CLI shows a "needs you" alert
   (answer in Gemini); Cursor reports steps as they finish; Codex reports when a turn is done.
 - HEIC pictures need the free "HEIF Image Extensions" from the Microsoft Store; WEBP and HEIC can't be written.
 - Brightness only works for a laptop's built-in screen.
