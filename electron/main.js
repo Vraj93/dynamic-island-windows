@@ -191,7 +191,10 @@ function startMedia() {
       if (!line) continue;
       try {
         const m = JSON.parse(line);
-        if (m.type === 'media') { lastMedia = m; send(m); mediaRestarts = 0; }
+        if (m.type === 'media') {
+          if (!lastMedia || lastMedia.title !== m.title) log(`media: "${m.title}" by "${m.artist}" (${m.source}), cover ${m.art ? Math.round(m.art.length / 1024) + ' KB' : 'none'}`);
+          lastMedia = m; send(m); mediaRestarts = 0;
+        }
         else if (m.type === 'fullscreen') { lastFullscreen = m; send(m); log('fullscreen ' + m.on); }
         else if (m.type === 'sys') send(m);
         else if (m.type === 'privacy') { lastPrivacy = m; send(m); }

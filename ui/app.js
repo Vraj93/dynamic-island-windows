@@ -169,11 +169,22 @@ const eq = () => `<span class="eq${mediaPlaying() ? '' : ' off'}"><i></i><i></i>
 function extractColor(src) {
   const img = new Image();
   img.onload = () => {
-    // A small square picture from a browser is the browser's own logo, not the video's artwork.
+    // When a site gives no artwork, the browser sends its own round logo instead. Real covers fill the whole square
+    // (even small ones, like Apple Music's 150 px); the logo has see-through corners. That's how they're told apart.
     const fromBrowser = /chrome|msedge|edge|firefox|308046B0AF4A39CB|opera|brave|vivaldi/i.test((state.media && state.media.source) || '');
-    const ok = !(fromBrowser && Math.abs(img.naturalWidth - img.naturalHeight) <= 2 && img.naturalWidth <= 256);
+    let ok = true;
+    if (fromBrowser) {
+      try {
+        const c = document.createElement('canvas'); c.width = c.height = 32;
+        const g = c.getContext('2d'); g.drawImage(img, 0, 0, 32, 32);
+        const a = (x, y) => g.getImageData(x, y, 1, 1).data[3];
+        ok = [a(1, 1), a(30, 1), a(1, 30), a(30, 30)].filter((v) => v < 200).length < 3;
+      } catch { ok = true; }
+    }
     if (ok !== (state.mediaArtOk !== false)) { state.mediaArtOk = ok; if (/^media|sheet/.test(state.view)) render(state.view); }
-    if (!ok) findCover(state.media); // the browser's logo, not the song's cover: look for the real one
+    // The browser's logo, not the song's cover: look for the real one. A small real cover (150 px from Apple Music):
+    // look for a sharp one to replace it.
+    if (!ok || (fromBrowser && img.naturalWidth < 300 && !(state.media && state.media.foundArt))) findCover(state.media);
     if (!ok) {
       state.mediaColor = tileColor().startsWith('#') ? [1, 3, 5].map((i) => parseInt(tileColor().slice(i, i + 2), 16)).join(',') : '255,138,92';
       document.documentElement.style.setProperty('--mc', state.mediaColor);
