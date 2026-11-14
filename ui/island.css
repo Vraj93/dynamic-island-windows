@@ -1,0 +1,169 @@
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:transparent;overflow:hidden}
+body{font-family:"Segoe UI Variable Text","Segoe UI",system-ui,sans-serif;color:#fff;-webkit-font-smoothing:antialiased;user-select:none;cursor:default;font-feature-settings:"tnum" 0}
+button,input{font:inherit;color:inherit}
+
+/* ---------- the island ---------- */
+#stage{position:fixed;left:0;right:0;top:0;display:flex;justify-content:center}
+#island{
+  --r:10px; --ease:cubic-bezier(.3,1.22,.45,1);
+  position:relative;background:#000;width:200px;height:10px;
+  border-radius:0 0 var(--r) var(--r);
+  box-shadow:0 18px 36px -14px rgba(0,0,0,.9),inset 0 -1px 0 rgba(255,255,255,.08);
+  transition:width .5s var(--ease),height .5s var(--ease),border-radius .5s var(--ease),opacity .22s ease,box-shadow .3s;
+}
+#island.gone{opacity:0;pointer-events:none}
+#island.quick{transition-duration:.28s}
+/* curved shoulders where the island meets the top edge of the screen */
+#island::before,#island::after{content:"";position:absolute;top:0;width:16px;height:16px;pointer-events:none}
+#island::before{left:-16px;background:radial-gradient(circle at 0 100%,rgba(0,0,0,0) 15.5px,#000 16px)}
+#island::after{right:-16px;background:radial-gradient(circle at 100% 100%,rgba(0,0,0,0) 15.5px,#000 16px)}
+#clip{position:absolute;inset:0;overflow:hidden;border-radius:inherit}
+#content{position:absolute;top:0;left:50%;transform:translateX(-50%)}
+#content.enter{animation:enter .4s cubic-bezier(.2,.8,.2,1) both}
+@keyframes enter{from{opacity:0;filter:blur(8px);transform:translateX(-50%) scale(.94)}to{opacity:1;filter:none;transform:translateX(-50%) scale(1)}}
+#measure{position:absolute;left:-10000px;top:0;visibility:hidden}
+
+/* alert outline: one continuous line down the shoulders, sides and bottom; the top edge stays black */
+#island.ring{border:1.5px solid var(--rc);border-top:0}
+#island.ring::before,#island.ring::after{width:17.5px;height:16px}
+#island.ring::before{left:-17.5px;
+  background:radial-gradient(circle at 0 100%,rgba(0,0,0,0) 17.3px,#000 17.7px),linear-gradient(180deg,#000 0,#000 1px,var(--rc) 6px),linear-gradient(#000,#000);
+  -webkit-mask-image:radial-gradient(circle at 0 100%,rgba(0,0,0,0) 15.7px,#000 16.1px)}
+#island.ring::after{right:-17.5px;
+  background:radial-gradient(circle at 100% 100%,rgba(0,0,0,0) 17.3px,#000 17.7px),linear-gradient(180deg,#000 0,#000 1px,var(--rc) 6px),linear-gradient(#000,#000);
+  -webkit-mask-image:radial-gradient(circle at 100% 100%,rgba(0,0,0,0) 15.7px,#000 16.1px)}
+#island.pulse{animation:pulse 1.6s ease-in-out infinite}
+@keyframes pulse{0%,100%{box-shadow:0 18px 36px -14px rgba(0,0,0,.9),0 10px 40px -6px rgba(var(--rgb),.25)}50%{box-shadow:0 18px 36px -14px rgba(0,0,0,.9),0 14px 50px -4px rgba(var(--rgb),.6)}}
+
+/* ---------- shared pieces ---------- */
+.v{display:flex;flex-direction:column}
+.row{display:flex;align-items:center;gap:12px}
+.sp{flex:1;min-width:0}
+.m{color:rgba(255,255,255,.62)}
+.d{color:rgba(255,255,255,.5)}
+.f12{font-size:12px}.f13{font-size:13px}.f14{font-size:14px}
+.f15{font-size:15px;font-weight:600}
+.tn{font-variant-numeric:tabular-nums}
+.big{font-family:"Segoe UI Variable Display","Segoe UI",sans-serif;font-weight:600;letter-spacing:-.03em;font-variant-numeric:tabular-nums;line-height:1}
+.ic{width:38px;height:38px;border-radius:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.ib{width:40px;height:40px;border-radius:50%;border:0;background:rgba(255,255,255,.1);display:inline-flex;align-items:center;justify-content:center;cursor:pointer;padding:0;flex-shrink:0;transition:background .15s,transform .15s}
+.ib:hover{background:rgba(255,255,255,.18)}
+.ib:active{transform:scale(.92)}
+.btn{font-size:14px;font-weight:600;border:0;border-radius:999px;height:42px;padding:0 20px;background:rgba(255,255,255,.1);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:8px;transition:background .15s,transform .15s,filter .15s}
+.btn:hover{background:rgba(255,255,255,.17)}
+.btn:active{transform:scale(.97)}
+.btn.w{background:#fff;color:#000}
+.btn.w:hover{filter:brightness(.92)}
+.btn.f{flex:1}
+.btn.sm{height:34px;padding:0 14px;font-size:13px}
+.chip{font-size:13px;font-weight:600;border:0;border-radius:999px;height:34px;padding:0 14px;background:rgba(255,255,255,.08);cursor:pointer;transition:background .15s}
+.chip:hover{background:rgba(255,255,255,.15)}
+.chip.on{background:#fff;color:#000}
+.line{position:relative;height:3px;border-radius:2px;background:rgba(255,255,255,.16)}
+.line>b{position:absolute;left:0;top:0;bottom:0;border-radius:2px;background:currentColor}
+
+/* ---------- utility sheet ---------- */
+.sheet{width:720px;padding:22px;gap:18px}
+.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.tile{display:flex;align-items:center;gap:12px;min-height:70px;padding:12px 14px;border:0;border-radius:20px;background:rgba(255,255,255,.06);text-align:left;cursor:pointer;transition:background .15s,transform .15s;position:relative}
+.tile:hover{background:rgba(255,255,255,.11)}
+.tile:active{transform:scale(.97)}
+.tile .t{display:block;font-size:15px;font-weight:600}
+.tile .s{display:block;font-size:12px;color:rgba(255,255,255,.5);margin-top:1px}
+.tile.soon{opacity:.55}
+.soonmsg{font-size:12px;color:rgba(255,255,255,.6);text-align:center;margin-top:-4px}
+
+/* ---------- timer ---------- */
+.setup{width:480px;padding:22px;gap:16px}
+.compact{height:38px;padding:0 16px 0 11px;flex-direction:row;align-items:center;gap:9px;white-space:nowrap}
+.texp{width:440px;padding:22px;gap:16px}
+.alert{height:58px;padding:0 9px 0 18px;flex-direction:row;align-items:center;gap:12px;white-space:nowrap}
+.lip{width:200px;height:10px}
+
+/* ---------- second island (timer next to music) ---------- */
+#bubble{position:absolute;top:0;left:0;background:#000;height:38px;border-radius:0 0 19px 19px;padding:0 15px 0 11px;display:flex;align-items:center;gap:8px;
+  white-space:nowrap;cursor:pointer;box-shadow:0 18px 36px -14px rgba(0,0,0,.9);transition:opacity .25s,transform .45s var(--ease, cubic-bezier(.3,1.22,.45,1))}
+#bubble.gone{opacity:0;transform:translateX(-30px) scale(.6);pointer-events:none}
+#bubble::before,#bubble::after{content:"";position:absolute;top:0;width:16px;height:16px;pointer-events:none}
+#bubble::before{left:-16px;background:radial-gradient(circle at 0 100%,rgba(0,0,0,0) 15.5px,#000 16px)}
+#bubble::after{right:-16px;background:radial-gradient(circle at 100% 100%,rgba(0,0,0,0) 15.5px,#000 16px)}
+
+/* ---------- system pop-ups ---------- */
+.hudv{height:46px;padding:0 18px;flex-direction:row;align-items:center;gap:14px;white-space:nowrap}
+.hudbar{flex:1;height:6px;border-radius:3px;background:rgba(255,255,255,.18);overflow:hidden}
+.hudbar b{display:block;height:100%;background:#fff;border-radius:3px;transition:width .12s ease-out}
+
+/* ---------- tools ---------- */
+.col{display:flex;flex-direction:column}
+.hr{height:1px;background:rgba(255,255,255,.08)}
+.plain{border:0;background:transparent;padding:0;cursor:pointer;color:inherit}
+.field{font:inherit;font-size:14px;color:#fff;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);border-radius:14px;height:46px;padding:0 16px;width:100%;outline:none;user-select:text}
+.field:focus{border-color:rgba(255,255,255,.35)}
+textarea.field{height:auto}
+.tg{width:46px;height:28px;border-radius:14px;border:0;background:rgba(255,255,255,.18);position:relative;cursor:pointer;flex-shrink:0;padding:0;transition:background .2s}
+.tg i{position:absolute;top:3px;left:3px;width:22px;height:22px;border-radius:11px;background:#fff;box-shadow:0 2px 4px rgba(0,0,0,.4);transition:left .2s}
+.tg.on{background:#30d158}.tg.on i{left:21px}
+.drop{border:2px dashed rgba(255,255,255,.22);border-radius:20px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;text-align:center;transition:background .15s,border-color .15s}
+.dz.hot{background:rgba(255,255,255,.07);border-style:solid}
+.files{display:flex;flex-wrap:wrap;gap:8px;max-height:250px;overflow:auto}
+.file{position:relative;width:96px;display:flex;flex-direction:column;align-items:center;gap:6px;background:rgba(255,255,255,.06);border-radius:16px;padding:12px 6px 10px;cursor:grab}
+.file:hover{background:rgba(255,255,255,.1)}
+.file .fx{position:absolute;top:4px;right:4px;width:22px;height:22px;opacity:0}
+.file:hover .fx{opacity:1}
+.fn{font-size:11px;color:rgba(255,255,255,.8);max-width:84px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ftp{width:38px;height:46px;border-radius:7px 13px 7px 7px;display:flex;align-items:flex-end;justify-content:center;padding-bottom:6px;font-size:9px;font-weight:700;color:#fff;background:#3d5afe;flex-shrink:0}
+.fmts{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.fmt{font-size:13px;font-weight:700;border:0;border-radius:14px;height:44px;background:rgba(255,255,255,.07);cursor:pointer;transition:background .15s}
+.fmt:hover{background:rgba(255,255,255,.13)}
+.fmt.on{background:#40c8e0;color:#001a20}
+.clip{display:flex;align-items:center;gap:12px;background:rgba(255,255,255,.05);border:0;border-radius:12px;padding:10px 12px;font-size:13px;text-align:left;cursor:pointer;width:100%}
+.clip:hover{background:rgba(255,255,255,.1)}
+.ty{font-size:10px;font-weight:700;color:rgba(255,255,255,.55);width:36px;flex-shrink:0;letter-spacing:.06em}
+#content ::-webkit-scrollbar{width:8px}#content ::-webkit-scrollbar-thumb{background:rgba(255,255,255,.15);border-radius:4px}
+
+/* small round "hide" button on expanded panels */
+.x{width:30px;height:30px;border-radius:50%;border:0;background:rgba(255,255,255,.08);color:rgba(255,255,255,.7);display:inline-flex;align-items:center;justify-content:center;cursor:pointer;padding:0;flex-shrink:0;transition:background .15s,color .15s}
+.x:hover{background:rgba(255,255,255,.18);color:#fff}
+
+/* ---------- agents ---------- */
+.spin{animation:spin .9s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.tag{font-size:11px;font-weight:600;border-radius:7px;padding:3px 0;flex-shrink:0;width:54px;text-align:center}
+.dot{flex-shrink:0}
+
+/* ---------- media ---------- */
+.art{flex-shrink:0;border-radius:10px;background:#2a2a30 center/cover no-repeat;box-shadow:0 6px 16px rgba(0,0,0,.5),inset 0 0 0 1px rgba(255,255,255,.1);display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.5)}
+.eq{display:flex;align-items:center;gap:2.5px;height:16px;color:rgb(var(--mc,255,138,92))}
+.eq i{display:block;width:3px;height:100%;border-radius:2px;background:currentColor;animation:eq .9s ease-in-out infinite}
+.eq i:nth-child(2){animation-delay:-.3s}.eq i:nth-child(3){animation-delay:-.6s}.eq i:nth-child(4){animation-delay:-.15s}.eq i:nth-child(5){animation-delay:-.45s}
+@keyframes eq{0%,100%{transform:scaleY(.25)}50%{transform:scaleY(1)}}
+.eq.off i{animation:none;transform:scaleY(.2)}
+/* when the island can hear the real audio, the bars follow it instead of the canned animation */
+body.liveviz .eq:not(.off) i{animation:none;transition:transform .06s linear}
+.mcompact{height:38px;width:168px;padding:0 14px 0 7px;flex-direction:row;align-items:center;justify-content:space-between}
+.mpeek{height:64px;width:420px;padding:0 20px 0 9px;flex-direction:row;align-items:center;gap:13px}
+.mexp{width:600px;padding:18px;gap:14px;position:relative}
+.mexp .tint{position:absolute;inset:0;pointer-events:none;background:radial-gradient(90% 120% at 0% 100%,rgba(var(--mc),.42),rgba(var(--mc),0) 62%)}
+.mexp>*{position:relative}
+.ttl{font-family:"Segoe UI Variable Display","Segoe UI",sans-serif;font-size:22px;font-weight:700;letter-spacing:-.02em;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ell{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.src{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:600;color:rgba(255,255,255,.78);background:rgba(255,255,255,.09);border-radius:999px;padding:4px 10px;flex-shrink:0;border:0;cursor:default}
+button.src{cursor:pointer}
+button.src:hover{background:rgba(255,255,255,.16)}
+.seek{position:relative;height:16px;display:flex;align-items:center;cursor:pointer}
+.seek .line{flex:1;color:#fff}
+.seek .line>b::after{content:"";position:absolute;right:-5px;top:50%;width:10px;height:10px;margin-top:-5px;border-radius:50%;background:#fff;box-shadow:0 0 0 4px rgba(255,255,255,.14);opacity:0;transition:opacity .15s}
+.seek:hover .line>b::after{opacity:1}
+.times{display:flex;justify-content:space-between;font-size:11px;color:rgba(255,255,255,.55);font-variant-numeric:tabular-nums;margin-top:4px}
+.ctl{width:44px;height:44px;border-radius:50%;border:0;background:transparent;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;padding:0;transition:background .15s,transform .15s}
+.ctl:hover{background:rgba(255,255,255,.1)}
+.ctl:active{transform:scale(.9)}
+.ctl:disabled{opacity:.3;cursor:default;background:transparent}
+.ctl.pl{width:58px;height:58px;background:#fff;color:#000}
+.ctl.pl:hover{background:#e8e8e8}
+.ctl.sm{width:36px;height:36px}
+.strip{display:flex;align-items:center;gap:12px;background:rgba(255,255,255,.06);border-radius:20px;padding:10px}
+.srclist{display:flex;flex-direction:column;gap:4px}
+.srcrow{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:12px;border:0;background:transparent;text-align:left;cursor:pointer}
+.srcrow:hover,.srcrow.on{background:rgba(255,255,255,.08)}

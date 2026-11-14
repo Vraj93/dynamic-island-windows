@@ -1,0 +1,17 @@
+{
+  "name": "dynamic-island",
+  "version": "0.1.0",
+  "description": "A Dynamic Island for Windows: media, timers, AI agent status and quick tools at the top of your screen.",
+  "private": true,
+  "main": "electron/main.js",
+  "scripts": {
+    "start": "electron .",
+    "connect-claude": "node scripts/claude-hooks.js connect",
+    "disconnect-claude": "node scripts/claude-hooks.js disconnect",
+    "claude-status": "node scripts/claude-hooks.js status"
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^45.3.2"
+  }
+}

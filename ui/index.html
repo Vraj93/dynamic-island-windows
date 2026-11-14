@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:">
+
+<title>Dynamic Island</title>
+<link rel="stylesheet" href="island.css">
+</head>
+<body>
+<div id="stage">
+  <div id="island" class="gone">
+    <div id="clip"><div id="content"></div></div>
+  </div>
+  <div id="bubble" class="gone"></div>
+</div>
+<div id="measure" aria-hidden="true"></div>
+<script src="app.js"></script>
+<script src="tools.js"></script>
+</body>
+</html>
