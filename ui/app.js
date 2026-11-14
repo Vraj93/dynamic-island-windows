@@ -942,18 +942,25 @@ function vizLoop(t = 0) {
   viz.raf = requestAnimationFrame(vizLoop);
   viz.last = t;
   viz.analyser.getByteFrequencyData(viz.data);
-  BANDS.forEach(([a, b], i) => {
+  // Loudness of each band, with treble lifted a little (music has far less energy up there).
+  const raws = BANDS.map(([a, b], i) => {
     let sum = 0;
     for (let k = a; k < b; k++) sum += viz.data[k];
-    const raw = sum / (b - a) / 255;
-    // Auto-gain per band: compare with a slowly falling recent peak, so quiet and loud songs both move.
-    viz.peak[i] = Math.max(raw, viz.peak[i] * 0.985, 0.06);
-    let target = Math.min(1, raw / viz.peak[i]) * (raw > 0.015 ? 1 : 0);
-    // A sudden rise (a beat, a drum hit) kicks the bar a little higher.
-    target = Math.min(1, target + Math.max(0, raw - viz.prev[i]) * 3);
+    return (sum / (b - a) / 255) * (1 + i * 0.12);
+  });
+  // One shared auto-gain for all bars (not one per bar): loud bands stand tall, quiet ones stay short, so the bars
+  // make a real, changing shape instead of all sitting near the top.
+  const loudest = Math.max(...raws);
+  viz.gain = Math.max(loudest, (viz.gain || 0.3) * 0.992, 0.08);
+  raws.forEach((raw, i) => {
+    const v = raw / viz.gain;
+    // Stretch the differences: below ~35% of the loudest band a bar stays low, the loudest reach the top.
+    let target = raw > 0.015 ? Math.pow(Math.max(0, Math.min(1, (v - 0.3) / 0.7)), 1.4) : 0;
+    // A sudden rise (a beat, a drum hit) kicks that bar up.
+    target = Math.min(1, target + Math.max(0, raw - viz.prev[i]) * 4);
     viz.prev[i] = raw;
     // Snap up, fall back quickly: lively like a real meter.
-    viz.lv[i] += (target - viz.lv[i]) * (target > viz.lv[i] ? 0.85 : 0.32);
+    viz.lv[i] += (target - viz.lv[i]) * (target > viz.lv[i] ? 0.8 : 0.28);
   });
   const bars = document.querySelectorAll('.eq i');
   bars.forEach((el, j) => { el.style.transform = `scaleY(${(0.12 + 0.88 * viz.lv[j % 7]).toFixed(3)})`; });
