@@ -33,6 +33,11 @@
 
   const scenes = {
     sheet() { music(); render('sheet'); },
+    netflix() {
+      music();
+      Object.assign(state.media, { source: 'Chrome', title: 'Netflix', artist: '', album: '', art: null, duration: 0 });
+      render('sheet');
+    },
     player() { music(); render('mediaExpanded'); },
     compact() { music(); timer(272); render('mediaCompact'); },
     agent() { agent('working'); render('agentCompact'); },

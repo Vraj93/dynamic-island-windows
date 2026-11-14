@@ -205,6 +205,10 @@ from `scripts/make-icons.ps1`.
 
 ## Limits
 
+- Media shows apps that report to Windows' media controls (Spotify, browsers, Windows Media Player, most store apps).
+  **VLC 3 doesn't**, so it can't appear; when a site gives no artwork (Netflix) a letter tile is shown instead.
+- AI agents: Claude Code and GitHub Copilot CLI can be approved from the island; Gemini CLI shows a "needs you" alert
+  (answer in Gemini); Cursor reports steps as they finish; Codex reports when a turn is done.
 - HEIC pictures need the free "HEIF Image Extensions" from the Microsoft Store; WEBP and HEIC can't be written.
 - Brightness only works for a laptop's built-in screen.
 - Not built yet: Windows notifications in the island, calendar, Bluetooth / Wi-Fi pop-ups.

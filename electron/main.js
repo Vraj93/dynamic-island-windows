@@ -484,6 +484,19 @@ ipcMain.handle('claude-hooks', (_e, cmd) => new Promise((resolve) => {
   p.on('exit', () => resolve(out.trim()));
 }));
 
+/* All AI agents: which are installed / connected, and connect or disconnect one (scripts/agent-hooks.js). */
+const AGENT_IDS = ['claude-code', 'copilot', 'gemini', 'cursor', 'codex'];
+ipcMain.handle('agent-hooks', (_e, req) => new Promise((resolve) => {
+  const cmd = req && req.cmd, agent = req && req.agent;
+  if (!(cmd === 'status' || ((cmd === 'connect' || cmd === 'disconnect') && AGENT_IDS.includes(agent)))) return resolve(null);
+  const args = [path.join(UNPACKED_ROOT, 'scripts', 'agent-hooks.js'), cmd, ...(agent ? [agent] : [])];
+  const p = spawn(process.platform === 'win32' ? 'node.exe' : 'node', args, { windowsHide: true });
+  let out = '';
+  p.stdout.on('data', (d) => { out += d; });
+  p.on('error', () => resolve({ ok: false, error: 'Node.js is needed to connect agents.' }));
+  p.on('exit', () => { try { resolve(JSON.parse(out.trim())); } catch { resolve({ ok: false, error: out.trim() || 'Something went wrong.' }); } });
+}));
+
 function createTray() {
   // tray.ico holds a separately drawn image for each size Windows uses (made by scripts/make-icons.ps1).
   tray = new Tray(nativeImage.createFromPath(path.join(__dirname, '..', 'assets', 'tray.ico')));

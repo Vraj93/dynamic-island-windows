@@ -7,7 +7,10 @@ const host = window.islandHost || {
   invoke: async (c) => (c === 'get-settings' ? { edgeTrigger: true, hoverDelay: 150, media: true, mediaPeek: true, liveBars: true, agents: true, volumeKeys: true,
     hudVolume: true, hudBrightness: true, hudCaps: true, hudBattery: true, clipboard: true, chimes: true, hideFullscreen: true, startWithWindows: true,
     tiles: ['timer', 'alarm', 'focus', 'reminder', 'note', 'clipboard', 'shelf', 'convert'] }
-    : c === 'app-info' ? { version: '0.1.1' } : c === 'claude-hooks' ? 'Installed for: UserPromptSubmit, PreToolUse' : null),
+    : c === 'app-info' ? { version: '0.1.1' } : c === 'claude-hooks' ? 'Installed for: UserPromptSubmit, PreToolUse'
+    : c === 'agent-hooks' ? { 'claude-code': { name: 'Claude Code', installed: true, connected: true }, copilot: { name: 'GitHub Copilot CLI', installed: false, connected: false },
+      gemini: { name: 'Gemini CLI', installed: true, connected: true }, cursor: { name: 'Cursor', installed: false, connected: false }, codex: { name: 'Codex CLI', installed: true, connected: false } }
+    : null),
 };
 let S = {};
 let section = (location.hash.match(/sec=(\w+)/) || [, 'general'])[1];
@@ -84,15 +87,25 @@ const SECTIONS = {
     </div>`,
 
   agents: () => {
-    const on = /Installed/.test(claude);
-    return `<h1>AI agents</h1><p class="lead">See what Claude Code is doing and answer its permission requests from the island.</p>
-    <div class="card">
-      ${item('agents', 'Show Claude Code in the island', 'Live step, approvals with Allow / Deny, and a "finished" summary. Off: Claude Code asks in its own window as usual.')}
-      <div class="item"><div class="t"><div class="n">Connection</div>
-        <div class="s"><span class="status"><span class="dot" style="background:${on ? '#30d158' : 'rgba(255,255,255,.3)'}"></span>${claude ? (on ? 'Connected: Claude Code sessions report to the island' : 'Not connected') : 'Checking…'}</span></div>
-        <div class="s">Adds small hooks to your Claude Code settings (a backup is made first). Needs Node.js. If the island isn't running or you don't answer within 55 seconds, Claude Code shows its normal prompt.</div></div>
-        <button class="btn ${on ? '' : 'primary'}" data-claude="${on ? 'disconnect' : 'connect'}">${on ? 'Disconnect' : 'Connect'}</button></div>
-    </div>`;
+    // What each agent can do with the island (from what its hooks support).
+    const CAN = {
+      'claude-code': 'Live steps, Allow / Deny from the island, finished summary.',
+      copilot: 'Live steps, Allow / Deny from the island, finished.',
+      gemini: 'Live steps, finished, and a "needs you" alert (answer in Gemini).',
+      cursor: 'Steps as they finish, and finished.',
+      codex: 'Tells you when a turn has finished, with its answer.',
+    };
+    const rows = agentStatus ? Object.entries(agentStatus).map(([id, a]) => `
+      <div class="item"><div class="t"><div class="n">${esc(a.name)}</div>
+        <div class="s"><span class="status"><span class="dot" style="background:${a.connected ? '#30d158' : 'rgba(255,255,255,.3)'}"></span>${a.connected ? 'Connected' : a.installed ? 'Installed, not connected' : 'Not found on this PC'}</span> · ${CAN[id]}</div>
+        ${agentError[id] ? `<div class="s" style="color:#ff8a84">${esc(agentError[id])}</div>` : ''}</div>
+        <button class="btn ${a.connected ? '' : 'primary'}" data-agent="${id}" data-cmd="${a.connected ? 'disconnect' : 'connect'}" ${a.installed || a.connected ? '' : 'disabled style="opacity:.4"'}>${a.connected ? 'Disconnect' : 'Connect'}</button></div>`).join('')
+      : '<div class="item"><div class="t"><div class="s">Checking which agents are on this PC…</div></div></div>';
+    return `<h1>AI agents</h1><p class="lead">See what your coding agents are doing, and answer permission requests from the island.</p>
+    <div class="card">${item('agents', 'Show AI agents in the island', 'Off: agents ask in their own windows as usual.')}</div>
+    <div class="sec">Agents</div>
+    <div class="card">${rows}</div>
+    <p class="lead" style="margin-top:14px">Connecting adds small hooks to that agent's own settings (a backup is made first) and needs Node.js. They never slow the agent down, and if the island isn't running, or you don't answer within 55 seconds, the agent asks you as usual.</p>`;
   },
 
   popups: () => `<h1>System pop-ups</h1><p class="lead">Short pop-ups in the island for system changes. Each shows for about two seconds.</p>
@@ -135,13 +148,21 @@ document.addEventListener('click', async (e) => {
   }
   const tg = e.target.closest('.tg[data-key]');
   if (tg && !tg.disabled) { host.send({ type: 'set-setting', key: tg.dataset.key, value: !S[tg.dataset.key] }); return; }
-  const c = e.target.closest('[data-claude]');
-  if (c) { c.disabled = true; c.textContent = 'Working…'; await host.invoke('claude-hooks', c.dataset.claude); await refreshClaude(); return; }
+  const ag = e.target.closest('[data-agent]');
+  if (ag && !ag.disabled) {
+    ag.disabled = true; ag.textContent = 'Working…';
+    const r = await host.invoke('agent-hooks', { cmd: ag.dataset.cmd, agent: ag.dataset.agent });
+    agentError[ag.dataset.agent] = r && r.ok === false ? r.error : '';
+    await refreshClaude();
+    return;
+  }
   const o = e.target.closest('[data-open]');
   if (o) host.send({ type: o.dataset.open === 'repo' ? 'open-repo' : 'open-data-folder' });
 });
 
-async function refreshClaude() { claude = await host.invoke('claude-hooks', 'status'); if (section === 'agents') draw(); }
+let agentStatus = null;
+const agentError = {};
+async function refreshClaude() { agentStatus = await host.invoke('agent-hooks', { cmd: 'status' }); if (section === 'agents') draw(); }
 
 host.onMessage((m) => { if (m.type === 'settings') { S = m.settings; draw(); } });
 (async () => {

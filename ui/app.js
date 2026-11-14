@@ -145,14 +145,39 @@ function mediaPos() {
   if (m.status === 'Playing' && m.updatedAt > 0) p += (Date.now() - m.updatedAt) / 1000;
   return Math.min(m.duration, Math.max(0, p));
 }
-const artStyle = () => (state.media && state.media.art ? `background-image:url('${state.media.art}')` : '');
-const artInner = () => (state.media && state.media.art ? '' : I.music);
+/* Artwork. When a site in a browser gives Windows no artwork (Netflix does this), the browser hands over its own
+ * logo instead; the tab's icon isn't available. Then, and whenever there's no artwork at all, show a tile with the
+ * first letter of the title in the site's colour. */
+const SITE_COLORS = [[/netflix/i, '#e50914'], [/youtube/i, '#ff0033'], [/prime video|amazon/i, '#00a8e1'], [/disney/i, '#113ccf'],
+  [/hotstar|jiocinema/i, '#1f80e0'], [/spotify/i, '#1ed760'], [/twitch/i, '#9146ff'], [/soundcloud/i, '#ff5500'], [/apple/i, '#fa2d48'], [/hulu/i, '#1ce783']];
+const artUsable = () => !!(state.media && state.media.art && state.mediaArtOk !== false);
+function tileColor() {
+  const m = state.media || {}, text = `${m.title} ${m.artist} ${m.album}`;
+  for (const [re, c] of SITE_COLORS) if (re.test(text)) return c;
+  let h = 0; for (const ch of String(m.title || 'x')) h = (h * 31 + ch.charCodeAt(0)) % 360;
+  return `hsl(${h},55%,42%)`;
+}
+const artStyle = () => (artUsable() ? `background-image:url('${state.media.art}')` : `background:${tileColor()}`);
+const artInner = () => {
+  if (artUsable()) return '';
+  const letter = esc((String((state.media && state.media.title) || '').trim()[0] || '♪').toUpperCase());
+  return `<svg viewBox="0 0 10 10" width="100%" height="100%" aria-hidden="true"><text x="5" y="7.1" text-anchor="middle" font-size="6.4" font-weight="700" fill="#fff" font-family="Segoe UI Variable Display,Segoe UI,sans-serif">${letter}</text></svg>`;
+};
 const eq = () => `<span class="eq${mediaPlaying() ? '' : ' off'}"><i></i><i></i><i></i><i></i><i></i></span>`;
 
 /* Pick a lively colour from the album art for the sound bars and the tint. */
 function extractColor(src) {
   const img = new Image();
   img.onload = () => {
+    // A small square picture from a browser is the browser's own logo, not the video's artwork.
+    const fromBrowser = /chrome|msedge|edge|firefox|308046B0AF4A39CB|opera|brave|vivaldi/i.test((state.media && state.media.source) || '');
+    const ok = !(fromBrowser && Math.abs(img.naturalWidth - img.naturalHeight) <= 2 && img.naturalWidth <= 256);
+    if (ok !== (state.mediaArtOk !== false)) { state.mediaArtOk = ok; if (/^media|sheet/.test(state.view)) render(state.view); }
+    if (!ok) {
+      state.mediaColor = tileColor().startsWith('#') ? [1, 3, 5].map((i) => parseInt(tileColor().slice(i, i + 2), 16)).join(',') : '255,138,92';
+      document.documentElement.style.setProperty('--mc', state.mediaColor);
+      return;
+    }
     try {
       const c = document.createElement('canvas'); c.width = c.height = 24;
       const g = c.getContext('2d'); g.drawImage(img, 0, 0, 24, 24);
@@ -223,15 +248,19 @@ function approvalText(a) {
 function liveAgents() {
   const now = Date.now();
   return [...state.agents.values()].filter((a) => !state.dismissedAgents.has(a.id)
-    && (a.status === 'working' || (a.status === 'done' && now - a.doneAt < DONE_SHOW_MS)));
+    && (a.status === 'working' || a.status === 'waiting' || ((a.status === 'done' || a.status === 'error') && now - a.doneAt < DONE_SHOW_MS)));
 }
 function primaryAgent() {
   const live = liveAgents().sort((x, y) => y.updated - x.updated);
-  return live.find((a) => a.status === 'working') || live[0] || null;
+  return live.find((a) => a.status === 'waiting') || live.find((a) => a.status === 'working') || live[0] || null;
 }
 const spinner = (s = 18) => `<svg class="spin" width="${s}" height="${s}" viewBox="0 0 24 24" style="flex-shrink:0"><circle cx="12" cy="12" r="9" fill="none" stroke="rgba(76,156,255,.22)" stroke-width="3"/><path d="M12 3a9 9 0 0 1 9 9" fill="none" stroke="#4c9cff" stroke-width="3" stroke-linecap="round"/></svg>`;
 const check = (s = 18) => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="#30d158" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><path d="M5 12.5l4.5 4.5L19 7"/></svg>`;
 const AGENT_NAME = 'Claude Code';
+const AGENT_COMPACT_W = 420;
+// Display names for each agent that can report to the island (see electron/hooks/agent-hook.js).
+const AGENT_NAMES = { 'claude-code': 'Claude Code', codex: 'Codex', gemini: 'Gemini', copilot: 'Copilot', cursor: 'Cursor' };
+const agentName = (a) => (a && AGENT_NAMES[a.agent]) || AGENT_NAME;
 
 /* Timer | Stopwatch switch at the top of both panels (the stopwatch lives inside Timer). */
 function modeSwitch(active) {
@@ -357,18 +386,38 @@ const views = {
 
   agentCompact() {
     const a = primaryAgent();
+    if (a.status === 'error') {
+      return {
+        html: `<div class="v compact" style="gap:10px;width:${AGENT_COMPACT_W}px">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ff6961" stroke-width="2.4" stroke-linecap="round" style="flex-shrink:0"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v5.5M12 16.5v.1"/></svg>
+          <span class="f13 sp ell"><b>${esc(agentName(a))}</b> <span style="color:#ff8a84">stopped · ${esc(a.answer)}</span></span></div>`,
+        radius: 19,
+      };
+    }
     if (a.status === 'done') {
       return {
-        html: `<div class="v compact" style="gap:10px">${check()}
-          <span class="f13"><b>${esc(a.project || AGENT_NAME)}</b> <span style="color:#30d158">finished</span></span>
+        html: `<div class="v compact" style="gap:10px;width:${AGENT_COMPACT_W}px">${check()}
+          <span class="f13 sp ell"><b>${esc(a.project || agentName(a))}</b> <span style="color:#30d158">finished</span></span>
           <span class="d f12">${fmtDur(a.doneAt - a.startedAt)}</span></div>`,
         radius: 19,
       };
     }
+    if (a.status === 'waiting') {
+      // Agents that can't be answered from the island (Gemini): point you to its window.
+      return {
+        html: `<div class="v compact" style="gap:10px;width:${AGENT_COMPACT_W}px">
+          <span class="dot" style="width:10px;height:10px;border-radius:50%;background:#ff9f0a"></span>
+          <span class="f13 sp ell"><b>${esc(agentName(a))}</b> <span style="color:#ffb340">needs you · answer in its window</span></span></div>`,
+        radius: 19,
+        ring: { color: '#ff9f0a', rgb: '255,159,10' },
+      };
+    }
     const others = liveAgents().length - 1;
     return {
-      html: `<div class="v compact" style="gap:10px;max-width:460px">${spinner()}
-        <span class="f13 ell" style="max-width:330px"><b>${AGENT_NAME}</b> <span class="m">· ${esc(a.step || 'Thinking')}</span></span>
+      // A steady width: the island doesn't jump around as the step text changes ("Thinking" -> "Editing main.js");
+      // long steps end in "…" and each new step fades in.
+      html: `<div class="v compact" style="gap:10px;width:${AGENT_COMPACT_W}px">${spinner()}
+        <span class="f13 sp ell"><b>${esc(agentName(a))}</b> <span class="m">· ${esc(a.step || 'Thinking')}</span></span>
         <span class="d f12 tn" data-bind="agentElapsed" data-since="${a.startedAt}">${fmtDur(Date.now() - a.startedAt)}</span>
         ${others > 0 ? `<span class="src">+${others}</span>` : ''}</div>`,
       radius: 19,
@@ -380,7 +429,7 @@ const views = {
     return {
       html: `<div class="v alert" style="gap:12px">
         <span class="dot" style="width:10px;height:10px;border-radius:50%;background:#ff9f0a"></span>
-        <span class="f14"><b>${AGENT_NAME}</b> <span style="color:#ffb340">needs your approval${n > 1 ? ` (${n})` : ''}</span></span>
+        <span class="f14"><b>${esc(agentName(state.agents.get((state.approvals[0] || {}).session)))}</b> <span style="color:#ffb340">needs your approval${n > 1 ? ` (${n})` : ''}</span></span>
         <button class="btn sm w" data-act="review">Review</button>
       </div>`,
       radius: 29,
@@ -395,7 +444,7 @@ const views = {
     return {
       html: `<div class="v texp" style="width:520px;gap:14px">
         <div class="row"><span class="dot" style="width:10px;height:10px;border-radius:50%;background:#ff9f0a"></span>
-          <div class="sp"><div class="f15">${esc(t.title)}</div><div class="d f12">${AGENT_NAME}${a.project ? ' · ' + esc(a.project) : ''}</div></div>
+          <div class="sp"><div class="f15">${esc(t.title)}</div><div class="d f12">${esc(agentName(a))}${a.project ? ' · ' + esc(a.project) : ''}</div></div>
           ${state.approvals.length > 1 ? `<span class="src">${state.approvals.length - 1} more</span>` : ''}</div>
         <div style="background:#0e0e12;border-radius:14px;padding:12px 14px;box-shadow:inset 0 0 0 1px rgba(255,255,255,.08);font-family:Consolas,'Cascadia Mono',monospace;font-size:13px;line-height:1.5;word-break:break-all;max-height:150px;overflow:auto;user-select:text">${esc(t.detail)}</div>
         <div class="row" style="gap:10px"><button class="btn f" data-act="decide" data-arg="deny">Deny</button><button class="btn f w" data-act="decide" data-arg="allow">Allow once</button></div>
@@ -417,12 +466,12 @@ const views = {
     }).join('');
     const others = list.filter((x) => x !== a).map((x) => `
       <button class="srcrow" data-act="focusAgent" data-arg="${esc(x.id)}">${x.status === 'done' ? check(16) : spinner(16)}
-        <span class="f13 sp ell" style="font-weight:600">${esc(x.project || AGENT_NAME)}</span><span class="d f12 ell" style="max-width:220px">${esc(x.status === 'done' ? 'finished' : x.step)}</span></button>`).join('');
+        <span class="f13 sp ell" style="font-weight:600">${esc(agentName(x) + (x.project ? ' · ' + x.project : ''))}</span><span class="d f12 ell" style="max-width:220px">${esc(x.status === 'done' ? 'finished' : x.step)}</span></button>`).join('');
     return {
       html: `<div class="v texp" style="width:520px;gap:14px">
         <div class="row">${done ? check(20) : spinner(20)}
           <div class="sp"><div class="f15 ell">${esc(a.title || (done ? 'Finished' : a.step || 'Working'))}</div>
-          <div class="d f12">${AGENT_NAME}${a.project ? ' · ' + esc(a.project) : ''} · <span data-bind="${done ? '' : 'agentElapsed'}" data-since="${a.startedAt}">${fmtDur((done ? a.doneAt : Date.now()) - a.startedAt)}</span></div></div>
+          <div class="d f12">${esc(agentName(a))}${a.project ? ' · ' + esc(a.project) : ''} · <span data-bind="${done ? '' : 'agentElapsed'}" data-since="${a.startedAt}">${fmtDur((done ? a.doneAt : Date.now()) - a.startedAt)}</span></div></div>
           <button class="x" data-act="hideAgent" aria-label="Hide until its next task" title="Hide until its next task">${I.close}</button></div>
         ${done && a.answer ? `<div class="f13" style="color:rgba(255,255,255,.82);line-height:1.6;max-height:140px;overflow:auto;white-space:pre-wrap;user-select:text">${esc(a.answer)}</div>` : ''}
         ${!done ? `<div class="m f13">${esc(a.step || 'Thinking…')}</div>` : ''}
@@ -554,6 +603,7 @@ const CLOSABLE = new Set(['sheet', 'timerSetup', 'timerExpanded', 'mediaExpanded
 
 /* ---------------- rendering ---------------- */
 let hideTimer = null;
+let lastHtml = '';
 
 function render(name, { animate } = {}) {
   const changed = name !== state.view;
@@ -575,6 +625,8 @@ function render(name, { animate } = {}) {
     return;
   }
 
+  const prevHtml = lastHtml;
+  lastHtml = v.html;
   measurer.innerHTML = v.html;
   const root = measurer.firstElementChild;
   const w = root.offsetWidth, h = root.offsetHeight;
@@ -596,9 +648,17 @@ function render(name, { animate } = {}) {
 
   content.innerHTML = v.html;
   if (changed || animate) {
-    content.classList.remove('enter');
+    content.classList.remove('enter', 'soft');
     void content.offsetWidth; // restart the fade-in
     content.classList.add('enter');
+    island.classList.remove('calm');
+  } else if (prevHtml !== v.html) {
+    // Same screen, new details (the next agent step, a new song...): a gentle fade, and a calm resize
+    // without the bouncy spring used for opening and closing panels.
+    content.classList.remove('enter', 'soft');
+    void content.offsetWidth;
+    content.classList.add('soft');
+    island.classList.add('calm');
   }
   updateBubble();
   trackRects(650);
@@ -685,6 +745,12 @@ function tick() {
   document.querySelectorAll('[data-bind="agentElapsed"]').forEach((e) => { e.textContent = fmtDur(Date.now() - +e.dataset.since); });
   // A paused song, or a finished agent, disappears from the island after a while.
   if (state.view === 'mediaCompact' && !mediaVisible()) render(baseView());
+  // Safety net: an agent that has said nothing for 10 minutes has most likely stopped without telling us
+  // (closed terminal, crash). Stop showing it as working; it comes back with its next step.
+  const nowMs = Date.now();
+  for (const a of state.agents.values()) {
+    if ((a.status === 'working' || a.status === 'waiting') && nowMs - (a.updated || 0) > 10 * 60 * 1000) a.status = 'idle';
+  }
   if (state.view === 'agentCompact' && !primaryAgent()) render(baseView());
 }
 setInterval(tick, 250);
@@ -803,7 +869,7 @@ function onMedia(m) {
   const prev = state.media;
   const newTrack = mediaKey(m) !== mediaKey(prev);
   if (m.active && m.status === 'Paused' && !(prev && prev.status === 'Paused' && !newTrack)) state.pausedSince = Date.now();
-  if (m.art && (!prev || prev.art !== m.art)) extractColor(m.art);
+  if (m.art && (!prev || prev.art !== m.art)) { state.mediaArtOk = undefined; extractColor(m.art); }
   if (!m.art && newTrack) document.documentElement.style.setProperty('--mc', state.mediaColor = '255,138,92');
   const shown = (x) => (x ? JSON.stringify([x.active, x.source, x.title, x.artist, x.album, x.status, x.canNext, x.canPrev, x.canSeek,
     (x.art || '').length, (x.sessions || []).map((s) => s.id + s.status).join(), x.duration > 0]) : '');
@@ -872,7 +938,7 @@ function onAgentEvent(ev, fromPermission) {
   const now = Date.now();
   let a = state.agents.get(ev.session_id);
   if (!a) {
-    a = { id: ev.session_id, project: baseName(ev.cwd), title: '', status: 'idle', step: '', startedAt: now, doneAt: 0, feed: [], answer: '' };
+    a = { id: ev.session_id, agent: ev.agent || 'claude-code', project: baseName(ev.cwd), title: '', status: 'idle', step: '', startedAt: now, doneAt: 0, feed: [], answer: '' };
     state.agents.set(ev.session_id, a);
   }
   a.updated = now;
@@ -893,12 +959,37 @@ function onAgentEvent(ev, fromPermission) {
       break;
     case 'PostToolUse':
     case 'PostToolUseFailure':
+      if (a.status !== 'working') { a.status = 'working'; if (wasDone || !a.startedAt) a.startedAt = now; }
       a.feed.push({ tool: ev.tool_name, text: feedText(ev.tool_name, ev.tool_input), failed: ev.hook_event_name === 'PostToolUseFailure' });
       if (a.feed.length > 30) a.feed.shift();
-      a.step = 'Thinking';
+      // Cursor only reports a step after it's done, so show that step; others move on to "Thinking".
+      a.step = a.agent === 'cursor' ? describeStep(ev.tool_name, ev.tool_input) : 'Thinking';
+      break;
+    case 'Attention': // the agent is waiting for you in its own window (Gemini permission prompts)
+      a.status = 'waiting'; a.step = ev.message || 'Waiting for you';
+      if (!a.startedAt) a.startedAt = now;
+      alertChime();
       break;
     case 'Stop':
-      if (a.status === 'working') { a.status = 'done'; a.doneAt = now; a.answer = ev.last_assistant_message || ''; doneChime(); }
+      if (a.status === 'working' || a.status === 'waiting') { a.status = 'done'; a.doneAt = now; a.answer = ev.last_assistant_message || ''; doneChime(); }
+      break;
+    case 'StopFailure': // Claude Code stopped because of an error (API error, usage limit...)
+      if (a.status === 'working' || a.status === 'waiting') {
+        a.status = 'error'; a.doneAt = now;
+        a.answer = ev.message || ev.last_assistant_message || 'Stopped because of an error.';
+        alertChime();
+      }
+      break;
+    case 'Notification': // Claude Code: "waiting for your next message" means this turn is over
+      if (ev.notification_type === 'idle_prompt' && (a.status === 'working' || a.status === 'waiting')) {
+        a.status = 'done'; a.doneAt = now;
+      }
+      break;
+    case 'TurnComplete': // Codex only says when a turn has finished
+      a.status = 'done'; a.startedAt = a.startedAt || now; a.doneAt = now;
+      if (ev.prompt) a.title = String(ev.prompt).split('\n')[0];
+      a.answer = ev.last_assistant_message || '';
+      doneChime();
       break;
     case 'SessionEnd':
       state.agents.delete(ev.session_id);
