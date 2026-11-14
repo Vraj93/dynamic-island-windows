@@ -122,7 +122,8 @@ if (host) {
   host.onMessage((m) => {
     if (m.type === 'privacy') {
       const was = muted();
-      state.priv = { mic: m.mic || [], cam: m.cam || [], screen: m.screen || [], micMuted: m.micMuted };
+      const real = (l) => (Array.isArray(l) ? l : []).filter((u) => u && u.app && u.since > 0);
+      state.priv = { mic: real(m.mic), cam: real(m.cam), screen: real(m.screen), micMuted: m.micMuted };
       if (!call()) callHidden = '';
       if (was !== muted() && state.micHud && Date.now() - state.micHud < 3000) state.micHud = Date.now(); // show the new state
       if (state.view === 'callExpanded') render(call() ? 'callExpanded' : baseView());

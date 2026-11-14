@@ -302,10 +302,21 @@ const views = {
         <div class="art" style="width:44px;height:44px;${artStyle()}">${artInner()}</div>
         <div class="sp"><div class="f14 ell" style="font-weight:600">${esc(m.title)}</div><div class="d f12 ell">${esc(m.artist || sourceInfo(m.source).name)}</div></div>
         ${eq()}
-        <button class="ctl sm" data-act="media" data-arg="prev" aria-label="Previous" ${m.canPrev ? '' : 'disabled'}>${I.prev(20)}</button>
+        ${m.readOnly ? '' : `<button class="ctl sm" data-act="media" data-arg="prev" aria-label="Previous" ${m.canPrev ? '' : 'disabled'}>${I.prev(20)}</button>
         <button class="ctl sm" data-act="media" data-arg="toggle" aria-label="Play or pause" style="background:rgba(255,255,255,.1)">${mediaPlaying() ? I.pause(18) : I.play(18)}</button>
-        <button class="ctl sm" data-act="media" data-arg="next" aria-label="Next" ${m.canNext ? '' : 'disabled'}>${I.next(20)}</button>
+        <button class="ctl sm" data-act="media" data-arg="next" aria-label="Next" ${m.canNext ? '' : 'disabled'}>${I.next(20)}</button>`}
       </div>` : '';
+    // Agents at work (or just finished) get a row of their own, like the song.
+    const agentRows = liveAgents().sort((x, y) => y.updated - x.updated).slice(0, 2).map((a) => {
+      const done = a.status === 'done', err = a.status === 'error', wait = a.status === 'waiting';
+      return `<button class="strip astrip" data-act="focusAgent" data-arg="${esc(a.id)}" style="--ac:${agentRgb(a)}">
+        <span class="alogo" style="width:44px;height:44px;border-radius:12px">${esc(agentName(a)[0])}</span>
+        <div class="sp" style="text-align:left"><div class="f14 ell" style="font-weight:600">${esc(agentName(a))}${a.project ? `<span class="d" style="font-weight:400"> · ${esc(a.project)}</span>` : ''}</div>
+          <div class="d f12 ell">${esc(err ? 'Stopped with an error' : done ? 'Finished' : wait ? 'Needs you in its window' : a.step || 'Thinking')}</div></div>
+        ${done ? check(18) : err ? '<span style="color:#ff6b6b;font-weight:700">!</span>' : spinner(18)}
+        <span class="f13 tn" style="font-weight:600;min-width:44px;text-align:right" ${done || err ? '' : `data-bind="agentClock" data-since="${a.startedAt}"`}>${fmtClock((done || err ? a.doneAt : Date.now()) - a.startedAt)}</span>
+      </button>`;
+    }).join('');
     return {
       html: `<div class="v sheet">
         <div class="row" style="padding:0 4px">
@@ -315,6 +326,7 @@ const views = {
         </div>
         ${shown.length ? `<div class="grid" style="grid-template-columns:repeat(${Math.min(3, shown.length)},minmax(0,1fr))">${tiles}</div>` : ''}
         ${strip}
+        ${agentRows}
         ${state.soon ? `<div class="soonmsg">${esc(state.soon)}</div>` : ''}
       </div>`,
       radius: 34,

@@ -53,6 +53,7 @@
 
   const scenes = {
     sheet() { music(); calendar(); render('sheet'); },
+    sheetagent() { music(); agent('working'); state.agents.get('demo').agent = 'claude-code'; render('sheet'); },
     calendar() { calendar(); render('calendar'); },
     calempty() { render('calendar'); },
     calnew() { C.local = []; actions.calNew(); document.querySelector('#calTitle').value = 'Dinner with Maya'; document.querySelector('#calEnd').value = '19:20'; document.querySelector('#calEnd').dispatchEvent(new Event('input', { bubbles: true })); },

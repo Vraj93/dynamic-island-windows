@@ -306,3 +306,5 @@ button.src:hover{background:rgba(255,255,255,.16)}
 .callmute.on{background:#ff453a}
 .pdots{position:absolute;top:7px;right:14px;display:flex;gap:4px;pointer-events:none;z-index:3}
 .pdots i{width:6px;height:6px;border-radius:3px;box-shadow:0 0 6px currentColor}
+.astrip{border:0;width:100%;cursor:pointer;font:inherit;color:inherit;transition:background .15s}
+.astrip:hover{background:rgba(255,255,255,.09)}

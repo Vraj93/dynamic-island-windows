@@ -273,11 +273,38 @@ function Read-Art($props) {
     }
 }
 
+# VLC 3 doesn't tell Windows what it's playing, but its window title does ("Movie.mkv - VLC media player").
+# We only read the title. Sending VLC media-key messages crashed it in testing, so the island doesn't control it.
+$vlcState = @{ title = ''; paused = $false; since = 0 }
+function Get-Vlc {
+    $p = Get-Process vlc -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowTitle -match '\s-\sVLC media player$' } | Select-Object -First 1
+    if (-not $p) { $script:vlcState.title = ''; return $null }
+    $t = $p.MainWindowTitle -replace '\s-\sVLC media player$', ''
+    if ($t -ne $script:vlcState.title) { $script:vlcState = @{ title = $t; paused = $false; since = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds() } }
+    return @{ hwnd = $p.MainWindowHandle; title = $t }
+}
+$usingVlc = $false
+
 function Publish {
     $s = Get-Session
     $sessions = @($manager.GetSessions() | ForEach-Object {
         @{ id = $_.SourceAppUserModelId; status = "$($_.GetPlaybackInfo().PlaybackStatus)" }
     })
+    $vlc = Get-Vlc
+    if ($vlc) { $sessions += @{ id = 'VLC'; status = $(if ($vlcState.paused) { 'Paused' } else { 'Playing' }) } }
+    # VLC is shown when you picked it, or when nothing else is playing.
+    $sPlaying = $s -and "$($s.GetPlaybackInfo().PlaybackStatus)" -eq 'Playing'
+    $script:usingVlc = [bool]($vlc -and ($script:preferred -eq 'VLC' -or -not $sPlaying))
+    if ($script:usingVlc) {
+        $st = if ($vlcState.paused) { 'Paused' } else { 'Playing' }
+        $key = "vlc|$($vlc.title)|$st|$($sessions.Count)"
+        if ($key -ne $script:lastKey) {
+            $script:lastKey = $key
+            Out-Json @{ type = 'media'; active = $true; source = 'VLC'; title = $vlc.title; artist = ''; album = ''; status = $st
+                canPlayPause = $false; canNext = $false; canPrev = $false; canSeek = $false; readOnly = $true; position = 0; duration = 0; updatedAt = 0; art = $null; sessions = $sessions }
+        }
+        return
+    }
     if (-not $s) {
         if ($script:lastKey -ne 'none') { $script:lastKey = 'none'; Out-Json @{ type = 'media'; active = $false; sessions = $sessions } }
         return
@@ -339,6 +366,7 @@ function Run-Command([string]$line) {
         Out-Json @{ type = 'media-error'; message = "mic $($parts[1]) -> $(switch ($r) { 1 { 'muted' } 0 { 'live' } default { 'no microphone' } })" }
         $script:privLast = ''; Publish-Privacy; return
     }
+    if ($script:usingVlc -and $parts[0] -in 'toggle', 'next', 'prev', 'seek') { return } # VLC: shown, not controlled
     $s = Get-Session
     if (-not $s) { return }
     switch ($parts[0]) {
@@ -354,21 +382,20 @@ function Run-Command([string]$line) {
 $privLast = ''
 $consent = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore'
 function Users-Of([string]$cap) {
-    $out = @()
     foreach ($root in @("$consent\$cap", "$consent\$cap\NonPackaged")) {
         if (-not (Test-Path $root)) { continue }
         foreach ($k in Get-ChildItem $root -ErrorAction SilentlyContinue) {
             if ($k.PSChildName -eq 'NonPackaged') { continue }
             $start = $k.GetValue('LastUsedTimeStart'); $stop = $k.GetValue('LastUsedTimeStop')
-            if (-not $start -or $stop -ne 0) { continue }
+            # In use only when it has started and Windows has explicitly recorded no stop yet (0).
+            if (-not $start -or $null -eq $stop -or [long]$stop -ne 0) { continue }
             $n = $k.PSChildName
             if ($n -match '#') { $n = ($n -split '#')[-1] -replace '\.exe$', '' } else { $n = (($n -split '_')[0] -split '\.')[-1] }
             if ($n -match '^(Dynamic Island|electron)$') { continue }   # the island itself (sound bars)
             $ms = [long](([DateTime]::FromFileTimeUtc([long]$start) - [DateTime]'1970-01-01').TotalMilliseconds)
-            $out += @{ app = $n; since = $ms }
+            @{ app = $n; since = $ms }   # one item at a time, so "nobody" is an empty list
         }
     }
-    , $out
 }
 function Publish-Privacy {
     $mic = @(Users-Of 'microphone'); $cam = @(Users-Of 'webcam')
