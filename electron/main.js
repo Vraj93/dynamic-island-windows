@@ -298,24 +298,34 @@ const DEFAULT_SETTINGS = {
   hideFullscreen: true,   // step aside for full-screen video and games (alerts still show)
   startWithWindows: false,
   // which tools appear in the utility sheet, in the order you put them
-  tiles: ['timer', 'alarm', 'stopwatch', 'focus', 'reminder', 'note', 'clipboard', 'shelf', 'convert'],
+  // (the stopwatch lives inside Timer; it can also be shown as its own button)
+  tiles: ['timer', 'alarm', 'focus', 'reminder', 'note', 'clipboard', 'shelf', 'convert'],
+  tilesVersion: 2,
 };
+const ALL_TILES = ['timer', 'alarm', 'stopwatch', 'focus', 'reminder', 'note', 'clipboard', 'shelf', 'convert'];
 const settingsFile = () => path.join(app.getPath('userData'), 'settings.json');
 let settings = { ...DEFAULT_SETTINGS };
 let settingsFromDisk = false;
 function loadSettings() {
   try { settings = { ...DEFAULT_SETTINGS, ...JSON.parse(fs.readFileSync(settingsFile(), 'utf8')) }; settingsFromDisk = true; }
   catch { settings = { ...DEFAULT_SETTINGS }; }
+  // Once: the stopwatch moved inside Timer, so take its separate button off existing sheets.
+  if ((settings.tilesVersion || 1) < 2) {
+    settings.tiles = (settings.tiles || []).filter((t) => t !== 'stopwatch');
+    settings.tilesVersion = 2;
+    if (settingsFromDisk) saveSettings();
+  }
 }
 function saveSettings() {
   try { fs.writeFileSync(settingsFile(), JSON.stringify(settings, null, 2)); settingsFromDisk = true; } catch (e) { log('settings save: ' + e.message); }
 }
 function setSetting(key, value) {
   if (!(key in DEFAULT_SETTINGS) || typeof value !== typeof DEFAULT_SETTINGS[key]) return;
+  if (key === 'hoverDelay') value = Math.max(0, Math.min(1500, Math.round(value / 50) * 50));
   if (key === 'tiles') {
     if (!Array.isArray(value)) return;
     // known tools only, no duplicates, in the order chosen
-    value = value.filter((t, i) => DEFAULT_SETTINGS.tiles.includes(t) && value.indexOf(t) === i);
+    value = value.filter((t, i) => ALL_TILES.includes(t) && value.indexOf(t) === i);
   }
   settings[key] = value;
   saveSettings();

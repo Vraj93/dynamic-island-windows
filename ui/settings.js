@@ -6,7 +6,7 @@ const host = window.islandHost || {
   send() {}, onMessage() {},
   invoke: async (c) => (c === 'get-settings' ? { edgeTrigger: true, hoverDelay: 150, media: true, mediaPeek: true, liveBars: true, agents: true, volumeKeys: true,
     hudVolume: true, hudBrightness: true, hudCaps: true, hudBattery: true, clipboard: true, chimes: true, hideFullscreen: true, startWithWindows: true,
-    tiles: ['timer', 'alarm', 'stopwatch', 'focus', 'reminder', 'note', 'clipboard', 'shelf', 'convert'] }
+    tiles: ['timer', 'alarm', 'focus', 'reminder', 'note', 'clipboard', 'shelf', 'convert'] }
     : c === 'app-info' ? { version: '0.1.1' } : c === 'claude-hooks' ? 'Installed for: UserPromptSubmit, PreToolUse' : null),
 };
 let S = {};
@@ -20,7 +20,7 @@ const item = (key, name, sub, disabled) => `<div class="item"><div class="t"><di
 
 // The nine tools of the utility sheet. Shown ones come first, in their sheet order; hidden ones after.
 const TOOLS = {
-  timer: ['Timer', '255,159,10'], alarm: ['Alarm', '255,105,97'], stopwatch: ['Stopwatch', '255,214,10'],
+  timer: ['Timer', '255,159,10'], alarm: ['Alarm', '255,105,97'], stopwatch: ['Stopwatch (also inside Timer)', '255,214,10'],
   focus: ['Focus', '191,140,255'], reminder: ['Reminder', '255,111,174'], note: ['Note', '99,230,190'],
   clipboard: ['Clipboard', '100,210,255'], shelf: ['Shelf', '48,209,88'], convert: ['Convert', '64,200,224'],
 };
@@ -41,6 +41,19 @@ function toolRows() {
     </div>`;
   }).join('');
 }
+const delayText = (ms) => (ms === 0 ? 'Instant' : ms < 1000 ? `${ms} ms` : `${+(ms / 1000).toFixed(2)} s`);
+// Hover delay slider: the label follows while you drag; the value is saved when you let go.
+document.addEventListener('input', (e) => {
+  if (e.target.id !== 'delay') return;
+  const v = Number(e.target.value);
+  e.target.style.setProperty('--fill', `${(v / 1500) * 100}%`);
+  document.getElementById('delayVal').textContent = delayText(v);
+});
+document.addEventListener('change', (e) => {
+  if (e.target.id !== 'delay') return;
+  S.hoverDelay = Number(e.target.value);
+  host.send({ type: 'set-setting', key: 'hoverDelay', value: S.hoverDelay });
+});
 function setTiles(list) { host.send({ type: 'set-setting', key: 'tiles', value: list }); S.tiles = list; draw(); }
 
 const SECTIONS = {
@@ -59,7 +72,8 @@ const SECTIONS = {
     <div class="card">
       ${item('edgeTrigger', 'Open when the mouse reaches the top edge', 'Rest the pointer at the top-centre of the main screen. The tray icon › Open utility sheet always works too.')}
       <div class="item"><div class="t"><div class="n">Hover delay</div><div class="s">How long the pointer rests on the edge before the sheet opens. Longer means fewer accidental openings.</div></div>
-        <div class="seg">${[0, 150, 400].map((v) => `<button data-delay="${v}" class="${S.hoverDelay === v ? 'on' : ''}" ${S.edgeTrigger ? '' : 'disabled'}>${v ? v + ' ms' : 'None'}</button>`).join('')}</div></div>
+        <div class="slider"><input type="range" id="delay" min="0" max="1500" step="50" value="${S.hoverDelay}" aria-label="Hover delay"
+          ${S.edgeTrigger ? '' : 'disabled'} style="--fill:${(S.hoverDelay / 1500) * 100}%"><span class="val" id="delayVal">${delayText(S.hoverDelay)}</span></div></div>
     </div>`,
 
   media: () => `<h1>Media</h1><p class="lead">Spotify, YouTube in a browser, VLC and anything else Windows knows is playing.</p>
@@ -121,8 +135,6 @@ document.addEventListener('click', async (e) => {
   }
   const tg = e.target.closest('.tg[data-key]');
   if (tg && !tg.disabled) { host.send({ type: 'set-setting', key: tg.dataset.key, value: !S[tg.dataset.key] }); return; }
-  const d = e.target.closest('[data-delay]');
-  if (d && !d.disabled) { host.send({ type: 'set-setting', key: 'hoverDelay', value: Number(d.dataset.delay) }); return; }
   const c = e.target.closest('[data-claude]');
   if (c) { c.disabled = true; c.textContent = 'Working…'; await host.invoke('claude-hooks', c.dataset.claude); await refreshClaude(); return; }
   const o = e.target.closest('[data-open]');

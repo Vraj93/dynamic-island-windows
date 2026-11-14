@@ -192,7 +192,7 @@ function checkAlarms() {
 /* ---------------- stopwatch ---------------- */
 views.stopwatch = () => {
   const laps = T.sw.laps.slice().reverse().map((l, i) => `<div class="row f13" style="padding:4px 2px"><span class="d sp">Lap ${T.sw.laps.length - i}</span><span class="tn">${fmtSw(l)}</span></div>`).join('');
-  return panel(`${head('Stopwatch')}
+  return panel(`<div class="row">${backBtn()}<span class="sp"></span>${modeSwitch('stopwatch')}<span class="sp"></span><span style="width:36px"></span></div>
     <div class="big" style="font-size:64px;text-align:center;color:#ffd60a;padding:4px 0" data-bind="sw">${fmtSw(swElapsed())}</div>
     <div class="row" style="gap:10px">
       <button class="btn f" data-act="${T.sw.running ? 'swLap' : 'swReset'}" ${!T.sw.running && !T.sw.acc ? 'disabled style="opacity:.4"' : ''}>${T.sw.running ? 'Lap' : 'Reset'}</button>

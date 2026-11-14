@@ -46,7 +46,7 @@ const state = {
 const HUD_MS = 1800;
 // Preferences from the Settings window (kept in sync by tools.js).
 const prefs = { media: true, mediaPeek: true, hideFullscreen: true, chimes: true, hudVolume: true, hudBrightness: true, hudCaps: true, hudBattery: true,
-  tiles: ['timer', 'alarm', 'stopwatch', 'focus', 'reminder', 'note', 'clipboard', 'shelf', 'convert'] };
+  tiles: ['timer', 'alarm', 'focus', 'reminder', 'note', 'clipboard', 'shelf', 'convert'] };
 const mediaKey = (x) => (x && x.active ? `${x.source}|${x.title}|${x.artist}` : '');
 const DONE_SHOW_MS = 90 * 1000; // a finished agent stays in the island this long
 
@@ -233,6 +233,14 @@ const spinner = (s = 18) => `<svg class="spin" width="${s}" height="${s}" viewBo
 const check = (s = 18) => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="#30d158" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><path d="M5 12.5l4.5 4.5L19 7"/></svg>`;
 const AGENT_NAME = 'Claude Code';
 
+/* Timer | Stopwatch switch at the top of both panels (the stopwatch lives inside Timer). */
+function modeSwitch(active) {
+  const timerView = state.timer ? 'timerExpanded' : 'timerSetup';
+  return `<div class="modes" role="tablist">
+    <button role="tab" aria-selected="${active === 'timer'}" class="${active === 'timer' ? 'on' : ''}" data-act="go" data-arg="${timerView}">Timer</button>
+    <button role="tab" aria-selected="${active === 'stopwatch'}" class="${active === 'stopwatch' ? 'on' : ''}" data-act="go" data-arg="stopwatch">Stopwatch</button></div>`;
+}
+
 /* ---------------- views ---------------- */
 const views = {
   none: () => null,
@@ -254,7 +262,9 @@ const views = {
     const tiles = shown.map((t) => `
       <button class="tile${t.ready ? '' : ' soon'}" data-act="tile" data-arg="${t.id}">
         <span class="ic" style="background:rgba(${t.color},.16);color:rgb(${t.color})">${t.icon}</span>
-        <span><span class="t">${t.name}</span><span class="s">${t.id === 'timer' && state.timer ? 'Running · ' + fmt(timeLeft()) : t.sub}</span></span>
+        <span><span class="t">${t.name}</span><span class="s">${t.id === 'timer' && state.timer ? 'Running · ' + fmt(timeLeft())
+          : t.id === 'timer' && typeof T !== 'undefined' && (T.sw.running || T.sw.acc) && !prefs.tiles.includes('stopwatch') ? 'Stopwatch · ' + fmtSw(swElapsed())
+          : t.id === 'timer' && !prefs.tiles.includes('stopwatch') ? 'Timer and stopwatch' : t.sub}</span></span>
       </button>`).join('');
     const m = state.media;
     const strip = m && m.active && (m.title || m.artist) ? `
@@ -286,7 +296,7 @@ const views = {
       `<button class="chip${state.setupSec === m * 60 ? ' on' : ''}" data-act="preset" data-arg="${m}">${m}m</button>`).join('');
     return {
       html: `<div class="v setup">
-        <div class="row"><button class="ib" data-act="go" data-arg="sheet" aria-label="Back" style="width:36px;height:36px">${I.back}</button><span class="f15 sp">New timer</span></div>
+        <div class="row"><button class="ib" data-act="go" data-arg="sheet" aria-label="Back" style="width:36px;height:36px">${I.back}</button><span class="sp"></span>${modeSwitch('timer')}<span class="sp"></span><span style="width:36px"></span></div>
         <div class="row" style="justify-content:center;gap:18px;padding:4px 0">
           <button class="ib" data-act="adjust" data-arg="-60" aria-label="One minute less">${I.minus}</button>
           <div class="big" style="font-size:72px;color:#ff9f0a;min-width:220px;text-align:center">${fmt(state.setupSec)}</div>
@@ -317,6 +327,7 @@ const views = {
     const paused = t.pausedLeft != null;
     return {
       html: `<div class="v texp">
+        <div class="row" style="justify-content:center">${modeSwitch('timer')}</div>
         <div class="row" style="gap:20px">
           ${ring(92, 7, left / t.total, '255,159,10')}
           <div class="sp"><div class="m f13">Timer</div>

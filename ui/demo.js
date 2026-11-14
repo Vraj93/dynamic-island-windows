@@ -39,6 +39,8 @@
     approval() { agent('working'); state.approvals.push({ reqId: 'x', session: 'demo', tool: 'Bash', input: { command: 'npm install electron --save-dev' } }); render('approvalExpanded'); },
     finished() { agent('done'); state.focusAgent = 'demo'; render('agentExpanded'); },
     timer() { timer(272); render('timerExpanded'); },
+    timersetup() { render('timerSetup'); },
+    stopwatch() { T.sw = { running: true, start: now - 72400, acc: 0, laps: [31200, 28900] }; render('stopwatch'); },
     timesup() { state.timer = { total: 600, endAt: now, pausedLeft: 0, done: true }; render('timerDone'); },
     volume() { state.hud = { kind: 'volume', value: 62, muted: false }; render('hud'); },
     focus() { T.focus = { phase: 'focus', session: 2, total: 1500, endAt: now + 1100000, pausedLeft: null }; render('focusView'); },

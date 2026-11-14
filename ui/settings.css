@@ -37,6 +37,13 @@ h1{font-family:"Segoe UI Variable Display","Segoe UI",sans-serif;font-size:26px;
 .mv{width:30px;height:30px;border-radius:8px;border:0;background:rgba(255,255,255,.07);color:#fff;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;padding:0;flex-shrink:0}
 .mv:hover{background:rgba(255,255,255,.15)}
 .mv:disabled{opacity:.2;cursor:default;background:transparent}
+.slider{display:flex;align-items:center;gap:12px;flex-shrink:0}
+.slider input{-webkit-appearance:none;appearance:none;width:220px;height:6px;border-radius:3px;cursor:pointer;margin:0;
+  background:linear-gradient(90deg,#0a6cff 0 var(--fill),rgba(255,255,255,.16) var(--fill) 100%)}
+.slider input::-webkit-slider-thumb{-webkit-appearance:none;width:18px;height:18px;border-radius:50%;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.5)}
+.slider input:disabled{opacity:.4;cursor:default}
+.slider input:focus-visible{outline:2px solid #4c9cff;outline-offset:6px}
+.slider .val{width:56px;text-align:right;font-size:13px;font-weight:600;font-variant-numeric:tabular-nums}
 ul.plain{margin:6px 0 0;padding-left:18px;color:rgba(255,255,255,.6);font-size:13px;line-height:1.7}
 a{color:#7ab3ff}
 ::-webkit-scrollbar{width:10px}::-webkit-scrollbar-thumb{background:rgba(255,255,255,.12);border-radius:5px}
