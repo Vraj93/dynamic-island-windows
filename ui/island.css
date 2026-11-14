@@ -155,7 +155,7 @@ textarea.field{height:auto}
 /* ---------- media ---------- */
 .art{flex-shrink:0;border-radius:10px;background:#2a2a30 center/cover no-repeat;box-shadow:0 6px 16px rgba(0,0,0,.5),inset 0 0 0 1px rgba(255,255,255,.1);display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.5)}
 /* when the island can hear the real audio, the bars follow it instead of the canned animation */
-body.liveviz .eq:not(.off) i{animation:none;transition:transform .06s linear}
+body.liveviz .eq:not(.off) i{animation:none;transition:transform .09s ease-out}
 .mcompact{height:38px;width:168px;padding:0 14px 0 7px;flex-direction:row;align-items:center;justify-content:space-between}
 .mpeek{height:64px;width:420px;padding:0 20px 0 9px;flex-direction:row;align-items:center;gap:13px}
 .mexp{width:900px;padding:20px;gap:14px;position:relative}

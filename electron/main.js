@@ -153,10 +153,13 @@ ipcMain.on('ui', (_e, msg) => {
 });
 
 /* ---------- mouse: click-through + hover zone ---------- */
+let pollNear = true;
 function poll() {
   if (!win || win.isDestroyed()) return;
   const p = screen.getCursorScreenPoint();
   const b = win.getBounds();
+  // Near the island (its window area plus a margin) the mouse is checked 60 times a second; elsewhere 20 is plenty.
+  pollNear = p.x > b.x - 80 && p.x < b.x + b.width + 80 && p.y < b.y + b.height + 80;
   const d = screen.getPrimaryDisplay().bounds;
 
   // Take the mouse only while it is over the island.
@@ -661,7 +664,7 @@ if (!app.requestSingleInstanceLock()) {
     } });
     powerMonitor.on('resume', () => calendar.nudge());
     powerMonitor.on('unlock-screen', () => calendar.nudge());
-    setInterval(poll, 16);
+    (function pollLoop() { poll(); setTimeout(pollLoop, pollNear ? 16 : 50); })();
     setInterval(pollClipboard, 800);
     // Re-pin to the top-centre if screens or scaling change.
     const replace = () => win && win.setBounds(windowBounds());

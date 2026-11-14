@@ -128,6 +128,32 @@ public static class IslandSys {
         foreach (var f in privFormats) if (f != 0 && IsClipboardFormatAvailable(f)) return true;
         return false;
     }
+    // Who is using a capability (microphone, webcam, screen capture) right now, from Windows' privacy records:
+    // an app is using it while LastUsedTimeStart is set and LastUsedTimeStop is 0. Every key is closed again
+    // (the PowerShell version left ~40 registry handles open each second, which slowly ate memory).
+    public static string[] UsersOf(string cap) {
+        var list = new System.Collections.Generic.List<string>();
+        string root = @"Software\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\" + cap;
+        foreach (var path in new[] { root, root + @"\NonPackaged" }) {
+            using (var k = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(path)) {
+                if (k == null) continue;
+                foreach (var name in k.GetSubKeyNames()) {
+                    if (name == "NonPackaged") continue;
+                    using (var s = k.OpenSubKey(name)) {
+                        if (s == null) continue;
+                        object start = s.GetValue("LastUsedTimeStart"), stop = s.GetValue("LastUsedTimeStop");
+                        if (start == null || stop == null || Convert.ToInt64(stop) != 0 || Convert.ToInt64(start) == 0) continue;
+                        string app = name.Contains("#") ? System.IO.Path.GetFileNameWithoutExtension(name.Substring(name.LastIndexOf('#') + 1))
+                            : name.Split('_')[0].Substring(name.Split('_')[0].LastIndexOf('.') + 1);
+                        if (app == "Dynamic Island" || app == "electron") continue; // the island itself (sound bars)
+                        long ms = (long)(DateTime.FromFileTimeUtc(Convert.ToInt64(start)) - new DateTime(1970, 1, 1)).TotalMilliseconds;
+                        list.Add(app + "|" + ms);
+                    }
+                }
+            }
+        }
+        return list.ToArray();
+    }
     public static int SetMic(int mode) { // mode: 1 mute, 0 unmute, 2 toggle
         try {
             int cur = MicMuted(); if (cur < 0) return -1;
@@ -395,20 +421,7 @@ function Run-Command([string]$line) {
 $privLast = ''
 $consent = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore'
 function Users-Of([string]$cap) {
-    foreach ($root in @("$consent\$cap", "$consent\$cap\NonPackaged")) {
-        if (-not (Test-Path $root)) { continue }
-        foreach ($k in Get-ChildItem $root -ErrorAction SilentlyContinue) {
-            if ($k.PSChildName -eq 'NonPackaged') { continue }
-            $start = $k.GetValue('LastUsedTimeStart'); $stop = $k.GetValue('LastUsedTimeStop')
-            # In use only when it has started and Windows has explicitly recorded no stop yet (0).
-            if (-not $start -or $null -eq $stop -or [long]$stop -ne 0) { continue }
-            $n = $k.PSChildName
-            if ($n -match '#') { $n = ($n -split '#')[-1] -replace '\.exe$', '' } else { $n = (($n -split '_')[0] -split '\.')[-1] }
-            if ($n -match '^(Dynamic Island|electron)$') { continue }   # the island itself (sound bars)
-            $ms = [long](([DateTime]::FromFileTimeUtc([long]$start) - [DateTime]'1970-01-01').TotalMilliseconds)
-            @{ app = $n; since = $ms }   # one item at a time, so "nobody" is an empty list
-        }
-    }
+    foreach ($u in [IslandSys]::UsersOf($cap)) { $a, $ms = $u -split '\|', 2; @{ app = $a; since = [long]$ms } }
 }
 function Publish-Privacy {
     $mic = @(Users-Of 'microphone'); $cam = @(Users-Of 'webcam')
@@ -445,7 +458,8 @@ while ($true) {
             if ($fs -ne $lastFullscreen) { $lastFullscreen = $fs; Out-Json @{ type = 'fullscreen'; on = $fs } }
             Publish
         }
-        if (($tickCount % 8) -eq 1) { Publish-Privacy }
+        if (($tickCount % 16) -eq 1) { Publish-Privacy }   # about every 2 s
+        if (($tickCount % 2500) -eq 0) { [GC]::Collect() }   # every ~5 min, return memory PowerShell no longer needs
     } catch {
         Out-Json @{ type = 'media-error'; message = "$($_.Exception.Message)" }
         Start-Sleep -Milliseconds 1500

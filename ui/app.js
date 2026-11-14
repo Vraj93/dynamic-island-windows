@@ -708,6 +708,7 @@ function render(name, { animate } = {}) {
   const root = measurer.firstElementChild;
   // Round up, so text is never cut by a fraction of a pixel ("Claude Co…").
   const box = root.getBoundingClientRect(), w = Math.ceil(box.width), h = Math.ceil(box.height);
+  measurer.innerHTML = ''; // measured: empty it, so its hidden copy of the animations stops running
 
   if (island.classList.contains('gone')) {
     // Coming back from hidden: start from the small lip, never from the last panel size.
@@ -944,6 +945,7 @@ function stopViz() {
 
 function vizLoop(t = 0) {
   viz.raf = requestAnimationFrame(vizLoop);
+  if (t - viz.last < 66) return; // 15 updates a second; CSS eases between them, so it still looks smooth
   viz.last = t;
   viz.analyser.getByteFrequencyData(viz.data);
   // Loudness of each band, with treble lifted a little (music has far less energy up there).
