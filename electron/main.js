@@ -468,7 +468,8 @@ ipcMain.handle('claude-hooks', (_e, cmd) => new Promise((resolve) => {
 }));
 
 function createTray() {
-  tray = new Tray(nativeImage.createFromPath(path.join(__dirname, '..', 'assets', 'tray.png')));
+  // tray.ico holds a separately drawn image for each size Windows uses (made by scripts/make-icons.ps1).
+  tray = new Tray(nativeImage.createFromPath(path.join(__dirname, '..', 'assets', 'tray.ico')));
   tray.setToolTip('Dynamic Island');
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: 'Open utility sheet', click: () => send({ type: 'edge-open' }) },

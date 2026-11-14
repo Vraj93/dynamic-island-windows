@@ -1125,4 +1125,4 @@ render('none');
 post({ type: 'ready' });
 
 /* Opened in a normal browser (no Electron)? Show the sheet so the UI can be checked. */
-if (!host) { document.body.style.background = '#1d44bf'; render('sheet'); }
+// Opened in a normal browser (no Electron)? ui/demo.js shows a sample screen.

@@ -1,9 +1,15 @@
 'use strict';
 /* Settings window. Every switch here maps to something the island really does;
  * values are saved by the main process (settings.json) and applied right away. */
-const host = window.islandHost;
+// Opened in a normal browser (README screenshots): sample values instead of the app's.
+const host = window.islandHost || {
+  send() {}, onMessage() {},
+  invoke: async (c) => (c === 'get-settings' ? { edgeTrigger: true, hoverDelay: 150, media: true, mediaPeek: true, liveBars: true, agents: true, volumeKeys: true,
+    hudVolume: true, hudBrightness: true, hudCaps: true, hudBattery: true, clipboard: true, chimes: true, hideFullscreen: true, startWithWindows: true }
+    : c === 'app-info' ? { version: '0.1.1' } : c === 'claude-hooks' ? 'Installed for: UserPromptSubmit, PreToolUse' : null),
+};
 let S = {};
-let section = 'general';
+let section = (location.hash.match(/sec=(\w+)/) || [, 'general'])[1];
 let claude = '';
 let info = {};
 
