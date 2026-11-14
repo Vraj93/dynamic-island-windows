@@ -27,6 +27,8 @@
     id: 'demo', project: 'DynamicIsland', title: 'Add media controls to the island', status,
     step: 'Running Typecheck the project', startedAt: now - 68000, doneAt: status === 'done' ? now : 0, updated: now,
     feed: [{ tool: 'Read', text: 'Island.tsx' }, { tool: 'Edit', text: 'Media.tsx' }, { tool: 'Bash', text: 'npm run typecheck' }],
+    stage: status === 'done' ? 3 : 1, stages: [0, 1], steps: 7,
+    diff: { file: 'checkout.ts', old: ['const total = 0'], new: ['const total = sum(items)'], more: false, live: status !== 'done' },
     answer: 'Added play/pause, next and previous to the expanded player and connected them to Windows media controls. Typecheck passes.',
   });
   const timer = (leftSec) => { state.timer = { total: 600, endAt: now + leftSec * 1000, pausedLeft: null, done: false }; };
@@ -68,8 +70,16 @@
       render('sheet');
     },
     player() { music(); render('mediaExpanded'); },
+    lyrics() {
+      music(); state.lyricsOpen = true;
+      const words = ['City lights are fading slow', 'Engine humming soft and low', 'Every mile a quiet song', 'We were never lost for long',
+        '', 'Hold the wheel and close your eyes', 'Midnight drive beneath the skies', 'Radio plays our favourite tune', 'Chasing shadows of the moon'];
+      state.lyrics = { key: songKey(state.media), status: 'ok', synced: true, lines: words.map((text, i) => ({ t: 66 + i * 5, text })) };
+      render('mediaExpanded');
+    },
     compact() { music(); timer(272); render('mediaCompact'); },
     agent() { agent('working'); render('agentCompact'); },
+    agentlive() { agent('working'); state.focusAgent = 'demo'; render('agentExpanded'); },
     approval() { agent('working'); state.approvals.push({ reqId: 'x', session: 'demo', tool: 'Bash', input: { command: 'npm install electron --save-dev' } }); render('approvalExpanded'); },
     finished() { agent('done'); state.focusAgent = 'demo'; render('agentExpanded'); },
     timer() { timer(272); render('timerExpanded'); },

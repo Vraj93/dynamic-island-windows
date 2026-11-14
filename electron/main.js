@@ -16,6 +16,7 @@ if (process.argv.includes('--agent-hook')) {
 
 const { app, BrowserWindow, Tray, Menu, ipcMain, screen, nativeImage, session, desktopCapturer, clipboard, shell, dialog, powerMonitor } = require('electron');
 const calendar = require('./calendar.js');
+const lyrics = require('./lyrics.js');
 const path = require('path');
 const fs = require('fs');
 const { spawn } = require('child_process');
@@ -300,6 +301,7 @@ const DEFAULT_SETTINGS = {
   media: true,            // show what's playing
   mediaPeek: true,        // "Now playing" pop-up when the song changes
   liveBars: true,         // sound bars follow the real audio
+  lyrics: true,           // lyrics button in the player (asks LRCLIB only when you open it)
   agents: true,           // Claude Code status and approvals
   volumeKeys: true,       // island handles the volume keys (hides Windows' pop-up)
   hudVolume: true, hudBrightness: true, hudCaps: true, hudBattery: true,
@@ -520,6 +522,8 @@ ipcMain.handle('claude-hooks', (_e, cmd) => {
 
 /* Calendar accounts, events and synced reminders (electron/calendar.js). */
 ipcMain.handle('cal', (_e, req) => calendar.handle(req));
+// Lyrics for the playing song (only when you open the lyrics drawer, and only if Lyrics is on in Settings).
+ipcMain.handle('lyrics', (_e, song) => (settings.lyrics === false || !song ? { status: 'off' } : lyrics.find(song)));
 
 function createTray() {
   // tray.ico holds a separately drawn image for each size Windows uses (made by scripts/make-icons.ps1).

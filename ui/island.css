@@ -163,7 +163,7 @@ textarea.field{height:auto}
 body.liveviz .eq:not(.off) i{animation:none;transition:transform .06s linear}
 .mcompact{height:38px;width:168px;padding:0 14px 0 7px;flex-direction:row;align-items:center;justify-content:space-between}
 .mpeek{height:64px;width:420px;padding:0 20px 0 9px;flex-direction:row;align-items:center;gap:13px}
-.mexp{width:600px;padding:18px;gap:14px;position:relative}
+.mexp{width:660px;padding:18px;gap:14px;position:relative}
 .mexp .tint{position:absolute;inset:0;pointer-events:none;background:radial-gradient(90% 120% at 0% 100%,rgba(var(--mc),.42),rgba(var(--mc),0) 62%)}
 .mexp>*{position:relative}
 .ttl{font-family:"Segoe UI Variable Display","Segoe UI",sans-serif;font-size:22px;font-weight:700;letter-spacing:-.02em;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -240,3 +240,47 @@ button.src:hover{background:rgba(255,255,255,.16)}
 .cform label{font-size:12px;font-weight:600;color:rgba(255,255,255,.45)}
 .cin{height:40px;width:auto;color-scheme:dark;font-variant-numeric:tabular-nums}
 .chip.sm{height:30px;padding:0 12px;font-size:12px}
+.tfade{animation:tfade .35s ease-out}
+@keyframes tfade{from{opacity:0;filter:blur(2px)}to{opacity:1;filter:none}}
+/* agent panel */
+.aexp{width:720px;gap:18px;position:relative;padding:22px 24px}
+.aexp>*{position:relative}
+.atint{position:absolute;inset:0;pointer-events:none;border-radius:inherit;background:linear-gradient(180deg,rgba(var(--ac),0) 30%,rgba(var(--ac),.30) 100%)}
+.alogo{width:38px;height:38px;border-radius:11px;background:rgb(var(--ac));color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:18px;flex-shrink:0;box-shadow:inset 0 0 0 1px rgba(255,255,255,.18)}
+.astate{display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:600;color:rgba(255,255,255,.7);background:rgba(255,255,255,.07);border-radius:999px;height:28px;padding:0 12px}
+.abody{display:grid;grid-template-columns:1fr 1.25fr;gap:22px;align-items:center}
+.abody.solo{grid-template-columns:1fr}
+.aclock{font-family:"Segoe UI Variable Display","Segoe UI",sans-serif;font-size:76px;font-weight:700;letter-spacing:-.04em;line-height:.95;color:#f4f1ea}
+.adiff{display:flex;flex-direction:column;gap:6px;background:rgba(20,20,24,.72);border-radius:18px;padding:14px;box-shadow:inset 0 0 0 1px rgba(255,255,255,.09);min-width:0}
+.adiff .lang{font-size:11px;font-weight:800;background:rgba(255,255,255,.12);border-radius:6px;padding:3px 6px;letter-spacing:.02em}
+.dl{display:flex;gap:10px;align-items:center;border-radius:8px;padding:5px 10px;font-family:"Cascadia Mono",Consolas,monospace;font-size:13px;min-width:0}
+.dl code{white-space:pre;overflow:hidden;text-overflow:ellipsis;min-width:0;font-family:inherit}
+.dl span{width:10px;flex-shrink:0;font-weight:700}
+.dl.del{background:rgba(255,69,58,.16);color:#ff9b93}
+.dl.add{background:rgba(48,209,88,.16);color:#8de5a3}
+.aanswer{font-size:13px;color:rgba(255,255,255,.82);line-height:1.6;max-height:120px;overflow:auto;white-space:pre-wrap;user-select:text}
+.astages{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.aseg{display:flex;flex-direction:column;gap:9px;font-size:13px;font-weight:600;color:rgba(255,255,255,.45)}
+.aseg.seen,.aseg.cur{color:#fff}
+.aseg .bar{height:5px;border-radius:3px;background:rgba(255,255,255,.14);overflow:hidden;position:relative}
+.aseg .bar b{display:block;height:100%;background:#fff;border-radius:3px;transition:width .5s ease}
+.aseg .bar b.run{position:absolute;width:40%;animation:arun 1.6s ease-in-out infinite}
+@keyframes arun{0%{left:-40%}100%{left:100%}}
+/* player controls row and lyrics */
+.mctl{display:grid;grid-template-columns:44px 1fr 44px;align-items:center}
+.lyrbtn{width:40px;height:40px;border-radius:50%;border:0;background:rgba(255,255,255,.08);color:rgba(255,255,255,.75);display:inline-flex;align-items:center;justify-content:center;cursor:pointer;padding:0;transition:background .15s,color .15s}
+.lyrbtn:hover{background:rgba(255,255,255,.16);color:#fff}
+.lyrbtn.on{background:rgb(var(--mc));color:#000}
+.lyr{position:relative;height:250px;border-radius:22px;overflow:hidden;background:#111}
+.lyr.msg{height:90px;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.05)}
+.lyrbg{position:absolute;inset:-40px;background-size:cover;background-position:center;filter:blur(36px) saturate(1.3) brightness(.45);transform:scale(1.1)}
+.lyrlist{position:absolute;inset:0;overflow:auto;padding:100px 26px;scrollbar-width:none;-webkit-mask-image:linear-gradient(transparent,#000 22%,#000 78%,transparent)}
+.lyrlist::-webkit-scrollbar{display:none}
+.lyrlist p{margin:0 0 14px;font-family:"Segoe UI Variable Display","Segoe UI",sans-serif;font-size:21px;font-weight:700;line-height:1.3;color:rgba(255,255,255,.38);transition:color .35s,transform .35s;transform-origin:left center}
+.lyr.synced .lyrlist p{cursor:pointer}
+.lyr.synced .lyrlist p:hover{color:rgba(255,255,255,.7)}
+.lyrlist p.was{color:rgba(255,255,255,.26)}
+.lyrlist p.on{color:rgb(var(--mc));transform:scale(1.04);text-shadow:0 0 24px rgba(var(--mc),.35)}
+.lyr:not(.synced) .lyrlist p{color:rgba(255,255,255,.8);font-size:17px;font-weight:600}
+.lyrlist p.gap{color:rgba(255,255,255,.3)}
+.lyrsrc{position:absolute;right:16px;bottom:10px}

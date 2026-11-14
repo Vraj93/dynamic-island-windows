@@ -45,7 +45,7 @@ const state = {
 };
 const HUD_MS = 1800;
 // Preferences from the Settings window (kept in sync by tools.js).
-const prefs = { media: true, mediaPeek: true, hideFullscreen: true, chimes: true, hudVolume: true, hudBrightness: true, hudCaps: true, hudBattery: true,
+const prefs = { media: true, mediaPeek: true, lyrics: true, hideFullscreen: true, chimes: true, hudVolume: true, hudBrightness: true, hudCaps: true, hudBattery: true,
   tiles: ['calendar', 'timer', 'alarm', 'focus', 'reminder', 'note', 'clipboard', 'shelf', 'convert'] };
 const mediaKey = (x) => (x && x.active ? `${x.source}|${x.title}|${x.artist}` : '');
 const DONE_SHOW_MS = 90 * 1000; // a finished agent stays in the island this long
@@ -458,24 +458,57 @@ const views = {
     const list = liveAgents();
     const a = state.agents.get(state.focusAgent) || primaryAgent();
     if (!a) return views.none();
-    const done = a.status === 'done';
-    const feed = a.feed.slice(-5).map((f) => {
-      const [k, rgb] = toolKind(f.tool);
-      return `<div class="row f13" style="gap:10px"><span class="tag" style="background:rgba(${rgb},.14);color:rgb(${rgb})">${k}</span>
+    const done = a.status === 'done' || a.status === 'error', err = a.status === 'error';
+    const rgb = agentRgb(a);
+    const stage = done ? 3 : (a.stage == null ? 0 : a.stage);
+    const seen = done ? [0, 1, 2, 3] : (a.stages || [0]);
+    const name = agentName(a);
+    const elapsed = (done ? a.doneAt : Date.now()) - a.startedAt;
+    // Right side: the code being changed, or the latest steps.
+    const d = a.diff;
+    const ext = d ? (d.file.match(/\.([\w]+)$/) || [, ''])[1].toLowerCase() : '';
+    const diffCard = d ? `<div class="adiff">
+        <div class="row" style="gap:10px"><span class="lang">${esc(LANG[ext] || (ext || 'TXT').slice(0, 4).toUpperCase())}</span>
+          <span class="f14 sp ell" style="font-weight:600">${esc(d.file || 'file')}</span><span class="d f12">${d.live && !done ? (d.isNew ? 'being written' : 'being edited') : d.isNew ? 'new file' : 'edited'}</span></div>
+        ${d.old.map((l) => `<div class="dl del"><span>−</span><code>${esc(l.trim().slice(0, 70)) || ' '}</code></div>`).join('')}
+        ${d.new.map((l) => `<div class="dl add"><span>+</span><code>${esc(l.trim().slice(0, 70)) || ' '}</code></div>`).join('')}
+        ${d.more ? '<div class="d f12" style="padding-left:4px">…</div>' : ''}
+      </div>` : '';
+    const feed = a.feed.slice(-4).map((f) => {
+      const [k, frgb] = toolKind(f.tool);
+      return `<div class="row f13" style="gap:10px"><span class="tag" style="background:rgba(${frgb},.14);color:rgb(${frgb})">${k}</span>
         <span class="sp ell" style="font-family:Consolas,'Cascadia Mono',monospace;font-size:12px">${esc(f.text)}</span>${f.failed ? '<span style="color:#ff6b6b" class="f12">failed</span>' : ''}</div>`;
+    }).join('');
+    const right = diffCard || (feed ? `<div class="adiff" style="gap:9px">${feed}</div>` : '');
+    const bars = STAGES.map((s, i) => {
+      const fill = i < stage || (done && i <= 3) ? 100 : i === stage ? null : 0;
+      return `<div class="aseg${i === stage && !done ? ' cur' : ''}${seen.includes(i) || i < stage ? ' seen' : ''}">
+        <div class="bar">${fill === null ? '<b class="run"></b>' : `<b style="width:${fill}%"></b>`}</div><span>${s}</span></div>`;
     }).join('');
     const others = list.filter((x) => x !== a).map((x) => `
       <button class="srcrow" data-act="focusAgent" data-arg="${esc(x.id)}">${x.status === 'done' ? check(16) : spinner(16)}
         <span class="f13 sp ell" style="font-weight:600">${esc(agentName(x) + (x.project ? ' · ' + x.project : ''))}</span><span class="d f12 ell" style="max-width:220px">${esc(x.status === 'done' ? 'finished' : x.step)}</span></button>`).join('');
+    const sub = err ? 'Stopped with an error' : done ? `Finished${a.steps ? ` · ${a.steps} step${a.steps === 1 ? '' : 's'}` : ''}`
+      : `${STAGE_TEXT[stage]} · stage ${stage + 1} of 4${a.steps ? ` · step ${a.steps}` : ''}`;
     return {
-      html: `<div class="v texp" style="width:520px;gap:14px">
-        <div class="row">${done ? check(20) : spinner(20)}
-          <div class="sp"><div class="f15 ell">${esc(a.title || (done ? 'Finished' : a.step || 'Working'))}</div>
-          <div class="d f12">${esc(agentName(a))}${a.project ? ' · ' + esc(a.project) : ''} · <span data-bind="${done ? '' : 'agentElapsed'}" data-since="${a.startedAt}">${fmtDur((done ? a.doneAt : Date.now()) - a.startedAt)}</span></div></div>
-          <button class="x" data-act="hideAgent" aria-label="Hide until its next task" title="Hide until its next task">${I.close}</button></div>
-        ${done && a.answer ? `<div class="f13" style="color:rgba(255,255,255,.82);line-height:1.6;max-height:140px;overflow:auto;white-space:pre-wrap;user-select:text">${esc(a.answer)}</div>` : ''}
-        ${!done ? `<div class="m f13">${esc(a.step || 'Thinking…')}</div>` : ''}
-        ${feed ? `<div style="display:flex;flex-direction:column;gap:9px;background:rgba(255,255,255,.05);border-radius:14px;padding:12px 14px">${feed}</div>` : ''}
+      html: `<div class="v texp aexp" style="--ac:${rgb}">
+        <div class="atint"></div>
+        <div class="row" style="gap:12px">
+          <span class="alogo">${esc(name[0])}</span>
+          <div class="sp"><div class="f15 ell">${esc(a.project || name)}</div><div class="d f12 ell">${esc(name)}${a.title ? ' · ' + esc(a.title) : ''}</div></div>
+          ${done ? (err ? '<span class="astate" style="color:#ff6b6b">Error</span>' : `<span class="astate" style="color:#30d158">${check(14)} Done</span>`) : `<span class="astate">${spinner(14)} Working</span>`}
+          <button class="x" data-act="hideAgent" aria-label="Hide until its next task" title="Hide until its next task">${I.close}</button>
+        </div>
+        <div class="abody${right ? '' : ' solo'}">
+          <div class="col" style="gap:8px;min-width:0">
+            <div class="aclock tn" data-bind="${done ? '' : 'agentClock'}" data-since="${a.startedAt}">${fmtClock(elapsed)}</div>
+            <div class="f14" style="color:rgba(255,255,255,.75)">${esc(sub)}</div>
+            ${!done ? `<div class="d f13 ell">${esc(a.step || 'Thinking')}</div>` : ''}
+          </div>
+          ${right}
+        </div>
+        ${done && a.answer ? `<div class="aanswer">${esc(a.answer)}</div>` : ''}
+        <div class="astages">${bars}</div>
         ${others ? `<div class="srclist">${others}</div>` : ''}
       </div>`,
       radius: 34,
@@ -557,7 +590,7 @@ const views = {
       html: `<div class="v mexp">
         <div class="tint"></div>
         <div class="row" style="gap:20px;align-items:stretch">
-          <div class="art" style="width:168px;height:168px;border-radius:22px;${artStyle()}">${artInner()}</div>
+          <div class="art" style="width:200px;height:200px;border-radius:24px;${artStyle()}">${artInner()}</div>
           <div class="sp" style="display:flex;flex-direction:column;justify-content:space-between;padding:4px 2px 0 0">
             <div>
               <div class="row" style="justify-content:space-between">
@@ -574,11 +607,16 @@ const views = {
             </div>` : '<div></div>'}
           </div>
         </div>
-        <div class="row" style="justify-content:center;gap:18px">
-          <button class="ctl" data-act="media" data-arg="prev" aria-label="Previous" ${m.canPrev ? '' : 'disabled'}>${I.prev(28)}</button>
-          <button class="ctl pl" data-act="media" data-arg="toggle" aria-label="Play or pause">${mediaPlaying() ? I.pause(26) : I.play(26)}</button>
-          <button class="ctl" data-act="media" data-arg="next" aria-label="Next" ${m.canNext ? '' : 'disabled'}>${I.next(28)}</button>
+        <div class="mctl">
+          <span></span>
+          <div class="row" style="justify-content:center;gap:18px">
+            <button class="ctl" data-act="media" data-arg="prev" aria-label="Previous" ${m.canPrev ? '' : 'disabled'}>${I.prev(28)}</button>
+            <button class="ctl pl" data-act="media" data-arg="toggle" aria-label="Play or pause">${mediaPlaying() ? I.pause(26) : I.play(26)}</button>
+            <button class="ctl" data-act="media" data-arg="next" aria-label="Next" ${m.canNext ? '' : 'disabled'}>${I.next(28)}</button>
+          </div>
+          ${prefs.lyrics !== false ? `<button class="lyrbtn${state.lyricsOpen ? ' on' : ''}" data-act="lyrics" aria-label="Lyrics" title="Lyrics">${I.lyrics}</button>` : '<span></span>'}
         </div>
+        ${state.lyricsOpen && prefs.lyrics !== false ? lyricsDrawer() : ''}
         ${sources}
       </div>`,
       radius: 34,
@@ -646,6 +684,14 @@ function render(name, { animate } = {}) {
   island.style.height = h + 'px';
   island.style.setProperty('--r', (v.radius || Math.min(34, h / 2)) + 'px');
 
+  // Same screen with only some words or numbers changed (the next agent step, the next song...): update just
+  // those in place, so the spinner keeps turning and nothing else blinks.
+  if (!changed && !animate && prevHtml !== v.html && patchInPlace(content, v.html)) {
+    island.classList.add('calm');
+    updateBubble();
+    trackRects(650);
+    return;
+  }
   content.innerHTML = v.html;
   if (changed || animate) {
     content.classList.remove('enter', 'soft');
@@ -662,6 +708,40 @@ function render(name, { animate } = {}) {
   }
   updateBubble();
   trackRects(650);
+}
+
+/* Update `root` to match `html` without rebuilding it, when only text and attributes differ.
+ * Returns false (and changes nothing) if the structure is different. Changed text gets a short fade. */
+function patchInPlace(root, html) {
+  const tpl = document.createElement('div');
+  tpl.innerHTML = html;
+  const same = (a, b) => {
+    if (a.nodeType !== b.nodeType || a.nodeName !== b.nodeName || a.childNodes.length !== b.childNodes.length) return false;
+    for (let i = 0; i < a.childNodes.length; i++) if (!same(a.childNodes[i], b.childNodes[i])) return false;
+    return true;
+  };
+  if (!same(root, tpl)) return false;
+  const faded = new Set();
+  const apply = (a, b) => {
+    if (a.nodeType === 3) {
+      if (a.nodeValue !== b.nodeValue) {
+        a.nodeValue = b.nodeValue;
+        const p = a.parentElement;
+        // Live counters (elapsed time, positions) just change; words fade in.
+        if (p && !p.closest('[data-bind]') && !faded.has(p)) { faded.add(p); p.classList.remove('tfade'); void p.offsetWidth; p.classList.add('tfade'); }
+      }
+      return;
+    }
+    if (a.nodeType !== 1) return;
+    for (const at of [...a.attributes]) if (!b.hasAttribute(at.name) && at.name !== 'class') a.removeAttribute(at.name);
+    for (const at of [...b.attributes]) {
+      if (at.name === 'class') { const keep = a.classList.contains('tfade'); if (a.getAttribute('class') !== at.value) { a.setAttribute('class', at.value); if (keep) a.classList.add('tfade'); } continue; }
+      if (a.getAttribute(at.name) !== at.value) a.setAttribute(at.name, at.value);
+    }
+    for (let i = 0; i < a.childNodes.length; i++) apply(a.childNodes[i], b.childNodes[i]);
+  };
+  apply(root, tpl);
+  return true;
 }
 
 function snapSize(w, h, r) {
@@ -743,6 +823,7 @@ function tick() {
   }
   manageViz();
   document.querySelectorAll('[data-bind="agentElapsed"]').forEach((e) => { e.textContent = fmtDur(Date.now() - +e.dataset.since); });
+  document.querySelectorAll('[data-bind="agentClock"]').forEach((e) => { e.textContent = fmtClock(Date.now() - +e.dataset.since); });
   // A paused song, or a finished agent, disappears from the island after a while.
   if (state.view === 'mediaCompact' && !mediaVisible()) render(baseView());
   // Safety net: an agent that has said nothing for 10 minutes has most likely stopped without telling us
@@ -932,6 +1013,48 @@ function onBattery(b, prev) {
   refreshResting();
 }
 
+/* ---------------- agent stages and the code being changed (for the expanded agent panel) ---------------- */
+const STAGES = ['Read', 'Edit', 'Test', 'Done'];
+const STAGE_TEXT = ['Looking around', 'Making changes', 'Testing', 'Done'];
+function stageOf(tool) {
+  if (/^(Edit|MultiEdit|Write|NotebookEdit)$/.test(tool)) return 1;
+  if (/^(Bash|PowerShell|BashOutput)$/.test(tool)) return 2;
+  if (/^(Read|NotebookRead|Grep|Glob|LS|Task|Agent)$/.test(tool) || /^Web/.test(tool)) return 0;
+  return -1;
+}
+// First lines of an edit: what was there and what replaces it.
+function diffOf(tool, input = {}) {
+  const file = input.file_path || input.notebook_path || input.path || '';
+  let oldS = input.old_string, newS = input.new_string;
+  if (Array.isArray(input.edits) && input.edits[0]) { oldS = input.edits[0].old_string; newS = input.edits[0].new_string; }
+  if (/^Write$/.test(tool) && typeof input.content === 'string') { oldS = ''; newS = input.content; }
+  if (typeof newS !== 'string' && typeof oldS !== 'string') return null;
+  const lines = (s) => String(s || '').replace(/\r/g, '').split('\n').filter((l, i, arr) => l.trim() || (i > 0 && i < arr.length - 1));
+  const o = lines(oldS), n = lines(newS);
+  // Drop the lines both sides share at the start, so the change itself shows.
+  let k = 0; while (k < o.length - 1 && k < n.length - 1 && o[k] === n[k]) k++;
+  return { file: baseName(file), old: o.slice(k, k + 3), new: n.slice(k, k + 3), more: Math.max(o.length, n.length) - k > 3, isNew: /^Write$/.test(tool) };
+}
+function trackStage(a, ev) {
+  const name = ev.hook_event_name;
+  if (name === 'UserPromptSubmit') { a.stage = 0; a.stages = [0]; a.steps = 0; a.diff = null; return; }
+  if (!a.stages) a.stages = [];
+  if (/^(PreToolUse|PermissionRequest)$/.test(name) || (a.agent === 'cursor' && /^PostToolUse/.test(name))) {
+    const s = stageOf(ev.tool_name);
+    if (name !== 'PermissionRequest') a.steps = (a.steps || 0) + 1;
+    if (s >= 0) { a.stage = s; if (!a.stages.includes(s)) a.stages.push(s); }
+    const d = s === 1 ? diffOf(ev.tool_name, ev.tool_input) : null;
+    if (d) { d.at = Date.now(); d.live = true; a.diff = d; }
+  }
+  if (/^PostToolUse/.test(name) && a.diff && a.diff.live && stageOf(ev.tool_name) === 1) a.diff.live = false;
+  if (/^(Stop|TurnComplete|Notification)$/.test(name) && a.status === 'done') { a.stage = 3; a.stages = [0, 1, 2, 3]; if (a.diff) a.diff.live = false; }
+}
+const AGENT_COLORS = { 'claude-code': '217,119,87', codex: '16,163,127', gemini: '76,141,246', copilot: '163,113,247', cursor: '200,200,210' };
+const agentRgb = (a) => AGENT_COLORS[a.agent] || (a.color ? hexToRgb(a.color) : '76,156,255');
+function hexToRgb(h) { const m = String(h).match(/^#?([\da-f]{2})([\da-f]{2})([\da-f]{2})/i); return m ? [1, 2, 3].map((i) => parseInt(m[i], 16)).join(',') : '76,156,255'; }
+const LANG = { js: 'JS', mjs: 'JS', cjs: 'JS', ts: 'TS', tsx: 'TSX', jsx: 'JSX', py: 'PY', css: 'CSS', html: 'HTML', json: 'JSON', md: 'MD', ps1: 'PS', cs: 'C#', go: 'GO', rs: 'RS', java: 'JV', rb: 'RB', php: 'PHP', sh: 'SH', yml: 'YML', yaml: 'YML', toml: 'TOML', sql: 'SQL', c: 'C', cpp: 'C++', h: 'H', swift: 'SW', kt: 'KT' };
+const fmtClock = (ms) => { const s = Math.max(0, Math.floor(ms / 1000)), h = Math.floor(s / 3600), m = Math.floor(s / 60) % 60; return h ? `${h}:${pad2(m)}:${pad2(s % 60)}` : `${m}:${pad2(s % 60)}`; };
+
 /* ---------------- agent updates ---------------- */
 function onAgentEvent(ev, fromPermission) {
   if (!ev || !ev.session_id) return;
@@ -996,6 +1119,7 @@ function onAgentEvent(ev, fromPermission) {
       state.approvals = state.approvals.filter((r) => r.session !== ev.session_id);
       break;
   }
+  trackStage(a, ev);
   if (fromPermission) return; // caller re-renders after queueing the approval
   if (state.view === 'agentExpanded') render('agentExpanded');
   else refreshResting();
