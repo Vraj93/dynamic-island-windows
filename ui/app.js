@@ -788,6 +788,7 @@ function snapSize(w, h, r) {
  * Music gets the bubble while an agent, a call, Focus or the stopwatch holds the island; a timer gets it otherwise. */
 const SIDE_HOSTS = ['agentCompact', 'agentAlert', 'callCompact', 'focusCompact', 'swCompact', 'timerCompact'];
 function bubbleKind() {
+  if (state.sideHud && CLOSABLE.has(state.view)) return 'hud';
   if (SIDE_HOSTS.includes(state.view) && mediaVisible() && state.media && state.media.active) return 'media';
   if (state.timer && !state.timer.done && ['mediaCompact', 'mediaPeek', 'agentCompact', 'agentAlert', 'callCompact'].includes(state.view)) return 'timer';
   return '';
@@ -801,6 +802,17 @@ function updateBubble() {
   } else if (kind === 'media') {
     const html = `<div class="art" style="width:24px;height:24px;border-radius:7px;${artStyle()}${mediaPlaying() ? '' : ';opacity:.45;filter:grayscale(.5)'}">${artInner()}</div>${mediaPlaying() ? eq() : `<span style="color:rgba(255,255,255,.6);display:flex">${I.pause(13)}</span>`}`;
     if (bubble.dataset.html !== html) { bubble.innerHTML = html; bubble.dataset.html = html; } // don't restart the bars
+  }
+  else if (kind === 'hud') {
+    const h = state.sideHud;
+    if (h.kind === 'volume' || h.kind === 'brightness') {
+      const vol = h.kind === 'volume', pct = vol && h.muted ? 0 : h.value;
+      bubble.innerHTML = `<span style="display:flex;transform:scale(.8)">${vol ? I.speaker(h.muted, h.value) : I.sun}</span>
+        <span class="hudbar" style="width:96px;flex:none"><b style="width:${pct}%;${vol ? '' : 'background:#ffd60a'}"></b></span>
+        <span class="f12 tn" style="font-weight:600;min-width:28px;text-align:right">${vol && h.muted ? 'Mute' : h.value}</span>`;
+    } else if (h.kind === 'caps') bubble.innerHTML = `<span style="display:flex;transform:scale(.8)">${I.caps}</span><span class="f12" style="font-weight:600">Caps Lock ${h.on ? 'on' : 'off'}</span>`;
+    else if (h.kind === 'charge') bubble.innerHTML = `<span style="display:flex;transform:scale(.8)">${h.charging ? I.bolt : I.plug}</span><span class="f12" style="font-weight:600">${h.charging ? 'Charging' : 'On battery'} · ${h.percent}%</span>`;
+    else if (h.label) bubble.innerHTML = `<span class="f12" style="font-weight:600">${esc(h.label)}</span>`;
   }
   if (kind !== 'media') bubble.dataset.html = '';
   bubble.dataset.kind = kind;
@@ -1053,8 +1065,16 @@ function onMedia(m) {
 
 /* ---------------- system pop-ups ---------------- */
 let hudTimer = null;
+let sideHudTimer = null;
 function showHud(h) {
-  if (CLOSABLE.has(state.view)) return; // never cover a panel you're using
+  // A panel is open: don't cover it; show the pop-up in the small island beside it instead.
+  if (CLOSABLE.has(state.view)) {
+    state.sideHud = h;
+    clearTimeout(sideHudTimer);
+    sideHudTimer = setTimeout(() => { state.sideHud = null; updateBubble(); }, HUD_MS);
+    updateBubble();
+    return;
+  }
   const sameBar = state.view === 'hud' && state.hud && state.hud.kind === h.kind
     && (h.kind === 'volume' || h.kind === 'brightness') && !!state.hud.muted === !!h.muted;
   state.hud = h;
@@ -1304,7 +1324,7 @@ content.addEventListener('click', (e) => {
   else if (state.view === 'agentAlert') render('approvalExpanded');
   else if (state.view === 'mediaCompact' || state.view === 'mediaPeek') { clearTimeout(peekTimer); render('mediaExpanded'); }
 });
-bubble.addEventListener('click', () => render(bubble.dataset.kind === 'media' ? 'mediaExpanded' : 'timerExpanded'));
+bubble.addEventListener('click', () => { const k = bubble.dataset.kind; if (k === 'media') render('mediaExpanded'); else if (k === 'timer') render('timerExpanded'); });
 
 /* Right-click a resting island to hide it. */
 island.addEventListener('contextmenu', (e) => {

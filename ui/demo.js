@@ -53,6 +53,7 @@
 
   const scenes = {
     sheet() { music(); calendar(); render('sheet'); },
+    sheetvol() { music(); render('sheet'); setTimeout(() => showHud({ kind: 'volume', value: 64, muted: false }), 300); },
     sheetagent() { music(); agent('working'); state.agents.get('demo').agent = 'claude-code'; render('sheet'); },
     calendar() { calendar(); render('calendar'); },
     calempty() { render('calendar'); },
