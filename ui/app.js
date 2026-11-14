@@ -44,6 +44,8 @@ const state = {
   lowBatteryShown: 0, // last low-battery level we warned about (15 or 5)
 };
 const HUD_MS = 1800;
+// Preferences from the Settings window (kept in sync by tools.js).
+const prefs = { media: true, mediaPeek: true, hideFullscreen: true, chimes: true, hudVolume: true, hudBrightness: true, hudCaps: true, hudBattery: true };
 const mediaKey = (x) => (x && x.active ? `${x.source}|${x.title}|${x.artist}` : '');
 const DONE_SHOW_MS = 90 * 1000; // a finished agent stays in the island this long
 
@@ -129,6 +131,7 @@ const mediaPlaying = () => !!(state.media && state.media.active && state.media.s
 function mediaVisible() {
   const m = state.media;
   if (!m || !m.active || !(m.title || m.artist)) return false;
+  if (!prefs.media) return false;
   if (state.dismissedMedia && state.dismissedMedia === mediaKey(m)) return false;
   if (m.status === 'Playing') return true;
   return m.status === 'Paused' && Date.now() - state.pausedSince < PAUSED_HIDE_MS;
@@ -524,7 +527,7 @@ function baseView() {
   if (state.timer && state.timer.done) return 'timerDone';
   if (state.approvals.length) return 'agentAlert';
   if (state.lowBattery) return 'lowBattery';
-  if (state.fullscreen) return 'none'; // full-screen video or game: stay out of the way, alerts only
+  if (state.fullscreen && prefs.hideFullscreen) return 'none'; // full-screen video or game: stay out of the way, alerts only
   if (primaryAgent()) return 'agentCompact';
   if (mediaVisible()) return 'mediaCompact';
   if (state.timer) return 'timerCompact';
@@ -539,6 +542,7 @@ let hideTimer = null;
 function render(name, { animate } = {}) {
   const changed = name !== state.view;
   state.view = name;
+  if (changed) viewChangedAt = Date.now();
   const v = views[name]();
 
   clearTimeout(hideTimer);
@@ -741,6 +745,7 @@ function unlockAudio() {
   try { audio = audio || new AudioContext(); if (audio.state === 'suspended') audio.resume(); } catch { /* no audio */ }
 }
 function chime() {
+  if (!prefs.chimes) return;
   unlockAudio();
   if (!audio) return;
   const t0 = audio.currentTime;
@@ -792,7 +797,7 @@ function onMedia(m) {
   if (sameLook) return;
 
   // New song while resting: announce it for 3 seconds (not over a full-screen app, not if you hid this one).
-  if (newTrack && m.active && m.status === 'Playing' && m.title && !state.fullscreen && mediaVisible()
+  if (newTrack && m.active && m.status === 'Playing' && m.title && prefs.mediaPeek && !(state.fullscreen && prefs.hideFullscreen) && mediaVisible()
       && RESTING.has(state.view) && state.view !== 'timerDone' && state.view !== 'agentAlert') {
     render('mediaPeek');
     clearTimeout(peekTimer);
@@ -832,14 +837,14 @@ function onSys(m) {
   const prev = state.sys;
   state.sys = m;
   if (!prev) return; // first reading: nothing changed yet
-  if (m.volume >= 0 && (m.volume !== prev.volume || m.muted !== prev.muted)) showHud({ kind: 'volume', value: m.volume, muted: m.muted });
-  else if (m.brightness >= 0 && m.brightness !== prev.brightness) showHud({ kind: 'brightness', value: m.brightness });
-  else if (m.caps !== prev.caps) showHud({ kind: 'caps', on: m.caps });
+  if (m.volume >= 0 && (m.volume !== prev.volume || m.muted !== prev.muted)) { if (prefs.hudVolume) showHud({ kind: 'volume', value: m.volume, muted: m.muted }); }
+  else if (m.brightness >= 0 && m.brightness !== prev.brightness) { if (prefs.hudBrightness) showHud({ kind: 'brightness', value: m.brightness }); }
+  else if (m.caps !== prev.caps) { if (prefs.hudCaps) showHud({ kind: 'caps', on: m.caps }); }
 }
 
 function onBattery(b, prev) {
-  if (prev && b.has && b.charging !== prev.charging) showHud({ kind: 'charge', charging: b.charging, percent: b.percent });
-  if (!b.has || b.charging) { state.lowBattery = false; state.lowBatteryShown = 0; }
+  if (prefs.hudBattery && prev && b.has && b.charging !== prev.charging) showHud({ kind: 'charge', charging: b.charging, percent: b.percent });
+  if (!prefs.hudBattery || !b.has || b.charging) { state.lowBattery = false; state.lowBatteryShown = 0; }
   else if (b.percent <= 5 && state.lowBatteryShown !== 5) { state.lowBattery = true; state.lowBatteryShown = 5; alertChime(); }
   else if (b.percent <= 15 && b.percent > 5 && !state.lowBatteryShown) { state.lowBattery = true; state.lowBatteryShown = 15; alertChime(); }
   refreshResting();
@@ -897,6 +902,7 @@ function refreshResting() {
 }
 
 function alertChime() {
+  if (!prefs.chimes) return;
   unlockAudio();
   if (!audio) return;
   const t0 = audio.currentTime;
@@ -911,6 +917,7 @@ function alertChime() {
   });
 }
 function doneChime() {
+  if (!prefs.chimes) return;
   unlockAudio();
   if (!audio) return;
   const t0 = audio.currentTime;
@@ -1020,21 +1027,40 @@ content.addEventListener('pointerdown', (e) => {
   el.addEventListener('pointerup', up);
 });
 
-/* Panels close shortly after the mouse leaves them. */
-let leaveTimer = null;
-island.addEventListener('mouseenter', () => clearTimeout(leaveTimer));
-island.addEventListener('mouseleave', () => {
-  if (!CLOSABLE.has(state.view) || dragging) return;
-  // Typing in a box (note, reminder, alarm label)? Don't close just because the mouse drifted off.
-  const typing = document.activeElement && /^(INPUT|TEXTAREA)$/.test(document.activeElement.tagName) && content.contains(document.activeElement);
-  if (typing) return;
-  clearTimeout(leaveTimer);
-  leaveTimer = setTimeout(() => {
-    // The panel may have grown back under the pointer while it was resizing: then stay open.
-    if (island.matches(':hover')) return;
-    state.soon = ''; state.showSources = false; render(baseView());
-  }, 380);
-});
+/* Closing open panels.
+ * A panel closes only when the pointer is clearly away from it (more than CLOSE_MARGIN px outside its edge)
+ * for a moment, never just because it crossed the edge. Panels change size (the sheet is 720 px wide,
+ * Settings 520 px), which can leave the pointer outside the new, narrower panel; so for a while after a
+ * panel changes, it waits longer before closing, giving you time to move onto it. */
+let leaveTimer = null; // kept for the edge messages below
+const pointer = { x: -1, y: -1, moved: false };
+document.addEventListener('mousemove', (e) => { pointer.x = e.clientX; pointer.y = e.clientY; pointer.moved = true; }, true);
+let viewChangedAt = 0;
+let awaySince = 0;
+const CLOSE_MARGIN = 56;       // px of slack around the panel
+const CLOSE_DELAY = 450;       // ms the pointer must stay away
+const CLOSE_DELAY_AFTER_CHANGE = 1600; // ms, just after the panel changed size or content
+const CHANGE_WINDOW = 2000;    // ms counted as "just changed"
+function isTyping() {
+  const a = document.activeElement;
+  return !!(a && /^(INPUT|TEXTAREA)$/.test(a.tagName) && content.contains(a));
+}
+setInterval(() => {
+  // (The drop screen closes itself when the drag stops; see tools.js.)
+  if (!CLOSABLE.has(state.view) || state.view === 'dropZone' || dragging || isTyping() || !pointer.moved) { awaySince = 0; return; }
+  const r = island.getBoundingClientRect();
+  const dx = Math.max(r.left - SHOULDER - pointer.x, 0, pointer.x - (r.right + SHOULDER));
+  const dy = Math.max(0, pointer.y - r.bottom);
+  if (Math.hypot(dx, dy) <= CLOSE_MARGIN) { awaySince = 0; return; }
+  const now = Date.now();
+  awaySince = awaySince || now;
+  const delay = now - viewChangedAt < CHANGE_WINDOW ? CLOSE_DELAY_AFTER_CHANGE : CLOSE_DELAY;
+  if (now - awaySince >= delay) {
+    awaySince = 0;
+    state.soon = ''; state.showSources = false;
+    render(baseView());
+  }
+}, 100);
 
 /* ---------------- messages from the main process ---------------- */
 if (host) {

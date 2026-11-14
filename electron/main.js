@@ -26,6 +26,9 @@ const ZONE_W = 320;           // width of the top-edge hover zone, centred
 const ZONE_HOLD_MS = 150;     // how long the mouse must rest there before the sheet opens
 
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required'); // timer chimes
+// Keep data in %APPDATA%\dynamic-island whatever the app's display name is: settings, alarms, notes and the
+// shelf live there, and the Claude Code hook looks there for the island's address.
+app.setPath('userData', path.join(app.getPath('appData'), 'dynamic-island'));
 
 let win = null;
 let tray = null;
@@ -103,7 +106,18 @@ ipcMain.on('ui', (_e, msg) => {
       break;
     case 'clip-copy': if (typeof msg.text === 'string') { clipSkip = msg.text; clipboard.writeText(msg.text); } break;
     case 'clip-clear': clipHistory = []; send({ type: 'clip', items: clipHistory }); break;
-    case 'settings': applySettings(msg.settings || {}); break;
+    case 'settings':
+      // Older builds kept settings in the island; adopt them once if there's no settings file yet.
+      if (!settingsFromDisk && msg.settings && typeof msg.settings === 'object') {
+        for (const k of Object.keys(DEFAULT_SETTINGS)) if (typeof msg.settings[k] === typeof DEFAULT_SETTINGS[k]) settings[k] = msg.settings[k];
+        saveSettings();
+      }
+      applySettings(settings);
+      break;
+    case 'set-setting': setSetting(msg.key, msg.value); break;
+    case 'open-settings': openSettings(); break;
+    case 'open-data-folder': shell.openPath(app.getPath('userData')); break;
+    case 'open-repo': shell.openExternal('https://github.com/Vraj93/dynamic-island-windows'); break;
     case 'open-path': if (typeof msg.path === 'string' && fs.existsSync(msg.path)) shell.showItemInFolder(msg.path); break;
     case 'quit': app.quit(); break;
   }
@@ -126,12 +140,12 @@ function poll() {
 
   // Top-edge hover zone.
   const centre = d.x + d.width / 2;
-  const inZone = p.y <= d.y + 1 && Math.abs(p.x - centre) <= ZONE_W / 2;
+  const inZone = settings.edgeTrigger !== false && p.y <= d.y + 1 && Math.abs(p.x - centre) <= ZONE_W / 2;
   const now = Date.now();
   if (inZone && !zone.inside) {
     zone = { inside: true, since: now, fired: false };
     send({ type: 'edge-enter' });
-  } else if (inZone && !zone.fired && now - zone.since >= ZONE_HOLD_MS) {
+  } else if (inZone && !zone.fired && now - zone.since >= (Number(settings.hoverDelay) || 0)) {
     zone.fired = true;
     send({ type: 'edge-open' });
   } else if (!inZone && zone.inside) {
@@ -149,6 +163,7 @@ let lastFullscreen = null;
 function startMedia() {
   const script = path.join(UNPACKED, 'media.ps1');
   media = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', script], { windowsHide: true });
+  if (settings.volumeKeys === false) media.stdin.write('volkeys off\n'); // the helper reads it once it's running
   let buf = '';
   media.stdout.setEncoding('utf8');
   media.stdout.on('data', (chunk) => {
@@ -204,6 +219,11 @@ function startAgentServer() {
     req.on('end', () => {
       let ev;
       try { ev = JSON.parse(body); } catch { res.writeHead(400); return res.end(); }
+      // AI agents switched off in Settings: answer at once so Claude Code just shows its normal prompt.
+      if (settings.agents === false) {
+        if (req.url === '/permission') { res.writeHead(200, { 'Content-Type': 'application/json' }); return res.end('{"decision":null}'); }
+        res.writeHead(204); return res.end();
+      }
       if (req.url === '/event') {
         res.writeHead(204); res.end();
         // A later step means any open approval for that session was answered somewhere else.
@@ -263,10 +283,45 @@ async function pollClipboard() {
   send({ type: 'clip', items: clipHistory, fresh: true });
 }
 
-/* ---------- settings coming from the UI ---------- */
-let settings = {};
+/* ---------- settings: saved in settings.json, edited in the Settings window, applied everywhere ---------- */
+const DEFAULT_SETTINGS = {
+  edgeTrigger: true,      // mouse at the top-centre edge opens the utility sheet
+  hoverDelay: 150,        // ms the mouse must rest there first
+  media: true,            // show what's playing
+  mediaPeek: true,        // "Now playing" pop-up when the song changes
+  liveBars: true,         // sound bars follow the real audio
+  agents: true,           // Claude Code status and approvals
+  volumeKeys: true,       // island handles the volume keys (hides Windows' pop-up)
+  hudVolume: true, hudBrightness: true, hudCaps: true, hudBattery: true,
+  clipboard: true,        // clipboard history (memory only)
+  chimes: true,           // sounds for timers, alarms, reminders, agents
+  hideFullscreen: true,   // step aside for full-screen video and games (alerts still show)
+  startWithWindows: false,
+};
+const settingsFile = () => path.join(app.getPath('userData'), 'settings.json');
+let settings = { ...DEFAULT_SETTINGS };
+let settingsFromDisk = false;
+function loadSettings() {
+  try { settings = { ...DEFAULT_SETTINGS, ...JSON.parse(fs.readFileSync(settingsFile(), 'utf8')) }; settingsFromDisk = true; }
+  catch { settings = { ...DEFAULT_SETTINGS }; }
+}
+function saveSettings() {
+  try { fs.writeFileSync(settingsFile(), JSON.stringify(settings, null, 2)); settingsFromDisk = true; } catch (e) { log('settings save: ' + e.message); }
+}
+function setSetting(key, value) {
+  if (!(key in DEFAULT_SETTINGS) || typeof value !== typeof DEFAULT_SETTINGS[key]) return;
+  settings[key] = value;
+  saveSettings();
+  applySettings(settings);
+}
+function broadcastSettings() {
+  const msg = { type: 'settings', settings };
+  send(msg);
+  if (settingsWin && !settingsWin.isDestroyed()) settingsWin.webContents.send('host', msg);
+}
 function applySettings(s) {
   settings = s;
+  broadcastSettings();
   clipEnabled = s.clipboard !== false;
   if (!clipEnabled) clipHistory = [];
   mediaCommand(s.volumeKeys === false ? 'volkeys off' : 'volkeys on');
@@ -278,6 +333,33 @@ function applySettings(s) {
     app.setLoginItemSettings({ openAtLogin: !!s.startWithWindows, path: process.execPath, args, name: 'Dynamic Island' });
   } catch (e) { log('login item: ' + e.message); }
 }
+
+/* ---------- the Settings window (centred, like a normal app window) ---------- */
+let settingsWin = null;
+function openSettings() {
+  if (settingsWin && !settingsWin.isDestroyed()) { settingsWin.show(); settingsWin.focus(); return; }
+  settingsWin = new BrowserWindow({
+    width: 980, height: 660, minWidth: 760, minHeight: 520,
+    center: true, show: false,
+    title: 'Dynamic Island Settings',
+    icon: path.join(__dirname, '..', 'assets', 'app-icon.png'),
+    backgroundColor: '#141416',
+    titleBarStyle: 'hidden',
+    titleBarOverlay: { color: '#0c0c0e', symbolColor: '#e4e4e7', height: 40 },
+    webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true },
+  });
+  settingsWin.removeMenu();
+  settingsWin.loadFile(path.join(__dirname, '..', 'ui', 'settings.html'));
+  settingsWin.once('ready-to-show', () => settingsWin.show());
+  settingsWin.on('closed', () => { settingsWin = null; });
+}
+ipcMain.handle('get-settings', () => settings);
+ipcMain.handle('app-info', () => ({
+  version: app.getVersion(),
+  electron: process.versions.electron,
+  packaged: app.isPackaged,
+  dataFolder: app.getPath('userData'),
+}));
 
 /* ---------- shelf: file icons and dragging files back out ---------- */
 const iconCache = new Map();
@@ -390,6 +472,7 @@ function createTray() {
   tray.setToolTip('Dynamic Island');
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: 'Open utility sheet', click: () => send({ type: 'edge-open' }) },
+    { label: 'Settings…', click: () => openSettings() },
     { label: 'Reload UI', click: () => win && win.reload() },
     { type: 'separator' },
     { label: 'Quit', click: () => app.quit() },
@@ -410,9 +493,11 @@ if (!app.requestSingleInstanceLock()) {
         .then((sources) => callback(sources[0] ? { video: sources[0], audio: 'loopback' } : {}))
         .catch(() => callback({}));
     });
+    loadSettings();
     createWindow();
     createTray();
     startMedia();
+    applySettings(settings);
     startAgentServer();
     setInterval(poll, 16);
     setInterval(pollClipboard, 800);

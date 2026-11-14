@@ -98,7 +98,7 @@ const gearSvg = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" str
 const coreSheet = views.sheet;
 views.sheet = () => {
   const v = coreSheet();
-  v.html = v.html.replace(/(\s*<\/div>\s*<div class="grid">)/, `<button class="x" data-act="go" data-arg="settings" aria-label="Settings" title="Settings" style="margin-left:6px">${gearSvg}</button>$1`);
+  v.html = v.html.replace(/(\s*<\/div>\s*<div class="grid">)/, `<button class="x" data-act="openSettings" aria-label="Settings" title="Settings" style="margin-left:6px">${gearSvg}</button>$1`);
   return v;
 };
 
@@ -421,7 +421,7 @@ views.shelf = () => panel(`${head('Shelf', T.shelf.length ? `<span class="d f12"
   ${T.shelf.length ? `<div class="files">${T.shelf.map(fileTile).join('')}</div>` : ''}
   <div class="drop" style="height:${T.shelf.length ? 70 : 150}px"><span class="f14" style="font-weight:600">Drag files here to keep them</span>
     <span class="d f12">Drag them out again into any folder or app</span></div>`, 560);
-views.dropZone = () => panel(`<div class="row" style="gap:12px">
+views.dropZone = () => panel(`<div class="row" style="gap:12px;pointer-events:none">
     <div class="drop dz sp" data-drop="shelf" style="height:170px;border-color:rgba(48,209,88,.55)"><span class="ic" style="background:rgba(48,209,88,.16);color:#30d158;width:46px;height:46px;border-radius:23px">${I.shelf}</span>
       <div><div class="f15">Keep on shelf</div><div class="d f12">Hold it for later</div></div></div>
     <div class="drop dz sp" data-drop="convert" style="height:170px;border-color:rgba(64,200,224,.6)"><span class="ic" style="background:rgba(64,200,224,.18);color:#40c8e0;width:46px;height:46px;border-radius:23px">${I.convert}</span>
@@ -448,31 +448,52 @@ document.addEventListener('dragstart', (e) => {
   const f = T.shelf[+el.dataset.shelf];
   if (f && host) host.startDrag(f.path);
 });
-// Dragging files over the island: show where they can go.
-let dragDepth = 0, dragReturn = 'sheet';
+/* Dragging files onto the island.
+ * Always the same screen: "Keep on shelf" on the left half, "Convert" on the right half, whatever the island
+ * was showing before. The choice is made from which half the pointer is over (no gap, no guessing).
+ * The screen stays while drag-over events keep arriving and goes back ~0.7 s after they stop
+ * (drag cancelled or moved away). We don't rely on "dragleave": it also fires whenever the elements
+ * under the pointer are swapped, which made the screen flicker back and forth. */
+let dragLastOver = 0, dragReturn = null, dragSide = '';
 const hasFiles = (e) => e.dataTransfer && [...e.dataTransfer.types].includes('Files');
-document.addEventListener('dragenter', (e) => {
+function dragSideAt(x) { const r = island.getBoundingClientRect(); return x < r.left + r.width / 2 ? 'shelf' : 'convert'; }
+function markSide(side) {
+  dragSide = side;
+  document.querySelectorAll('.dz').forEach((z) => z.classList.toggle('hot', z.dataset.drop === side));
+}
+function onDragOver(e) {
   if (!hasFiles(e)) return;
   e.preventDefault();
-  if (dragDepth++ === 0 && state.view !== 'dropZone') { dragReturn = state.view; if (state.view !== 'shelf' && state.view !== 'convert') render('dropZone'); }
-});
-document.addEventListener('dragover', (e) => {
-  if (!hasFiles(e)) return;
-  e.preventDefault();
-  document.querySelectorAll('.dz').forEach((z) => z.classList.toggle('hot', z.contains(e.target)));
-});
-document.addEventListener('dragleave', (e) => { if (hasFiles(e) && --dragDepth <= 0) { dragDepth = 0; if (state.view === 'dropZone') render(CLOSABLE.has(dragReturn) ? dragReturn : baseView()); } });
+  e.dataTransfer.dropEffect = 'copy';
+  dragLastOver = Date.now();
+  pointer.x = e.clientX; pointer.y = e.clientY; pointer.moved = true;
+  if (state.view !== 'dropZone') {
+    dragReturn = CLOSABLE.has(state.view) ? state.view : null;
+    render('dropZone');
+    dragSide = '';
+  }
+  const side = dragSideAt(e.clientX);
+  if (side !== dragSide || !document.querySelector('.dz.hot')) markSide(side);
+}
+document.addEventListener('dragenter', onDragOver);
+document.addEventListener('dragover', onDragOver);
+setInterval(() => {
+  if (state.view === 'dropZone' && Date.now() - dragLastOver > 700) render(dragReturn || baseView());
+}, 150);
 document.addEventListener('drop', async (e) => {
   if (!hasFiles(e)) return;
   e.preventDefault();
-  dragDepth = 0;
+  dragLastOver = 0;
   const paths = [...e.dataTransfer.files].map((f) => (host ? host.pathFor(f) : '')).filter(Boolean);
-  const zone = e.target.closest && e.target.closest('[data-drop]');
-  const target = state.view === 'convert' ? 'convert' : zone ? zone.dataset.drop : state.view === 'shelf' ? 'shelf' : 'shelf';
-  if (target === 'convert') { T.convertFiles = paths; T.convertResults = null; T.convertTo = ''; render('convert'); }
-  else { await addToShelf(paths); render('shelf'); showHudSoon(`${paths.length} file${paths.length === 1 ? '' : 's'} added to shelf`); }
+  if (!paths.length) { render(dragReturn || baseView()); return; }
+  if (dragSideAt(e.clientX) === 'convert') {
+    T.convertFiles = paths; T.convertResults = null; T.convertTo = ''; T.convertProgress = [];
+    render('convert');
+  } else {
+    await addToShelf(paths);
+    render('shelf');
+  }
 });
-function showHudSoon(label) { setTimeout(() => { if (state.view === 'shelf') return; showHud({ kind: 'caps', label }); }, 50); }
 
 /* ---------------- convert ---------------- */
 function convertKind(files) {
@@ -556,11 +577,21 @@ Object.assign(actions, {
   setToggle(key) { T.settings[key] = !T.settings[key]; saveSettings(); render('settings'); },
   async claudeHooks(cmd) { if (!host) return; await host.invoke('claude-hooks', cmd); T.claudeStatus = await host.invoke('claude-hooks', 'status'); render('settings'); },
   quitIsland() { post({ type: 'quit' }); },
+  // Settings open in their own window in the middle of the screen.
+  openSettings() { post({ type: 'open-settings' }); render(baseView()); },
 });
 function saveSettings() {
   store.set('settings', T.settings);
   post({ type: 'settings', settings: T.settings });
   if (!T.settings.liveBars) stopViz();
+}
+// Settings coming from the Settings window (via the main process).
+function applyPrefs(s) {
+  T.settings = { ...T.settings, ...s };
+  store.set('settings', T.settings);
+  Object.keys(prefs).forEach((k) => { if (k in s) prefs[k] = s[k]; });
+  if (!T.settings.liveBars || !T.settings.media) stopViz();
+  if (RESTING.has(state.view) && state.view !== 'hud') render(baseView());
 }
 const coreManageViz = manageViz;
 manageViz = () => (T.settings.liveBars ? coreManageViz() : (viz.stream && stopViz()));
@@ -573,7 +604,7 @@ baseView = function () {
   if (T.dueReminder) return 'reminderDue';
   if (T.shift) return 'focusShift';
   const b = coreBaseView();
-  if (b !== 'none' || state.fullscreen) return b;
+  if (b !== 'none' || (state.fullscreen && prefs.hideFullscreen)) return b;
   if (T.focus) return 'focusCompact';
   if (T.sw.running) return 'swCompact';
   return 'none';
@@ -618,7 +649,8 @@ setInterval(() => { const t = fmtSw(swElapsed()); document.querySelectorAll('[da
 /* ---------------- messages and start-up ---------------- */
 if (host) {
   host.onMessage((m) => {
-    if (m.type === 'clip') { T.clip = m.items || []; if (state.view === 'clipboard') render('clipboard'); }
+    if (m.type === 'settings') applyPrefs(m.settings || {});
+    else if (m.type === 'clip') { T.clip = m.items || []; if (state.view === 'clipboard') render('clipboard'); }
     else if (m.type === 'convert-progress') {
       if (m.index < T.convertProgress.length) T.convertProgress[m.index].state = m.state;
       if (state.view === 'convert') render('convert');
