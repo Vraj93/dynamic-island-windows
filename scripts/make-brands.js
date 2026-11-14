@@ -24,6 +24,9 @@ for (const [id, [slug, name, re]] of Object.entries(WANT)) {
   if (!d || !meta) { console.log('skip', id); continue; }
   res[id] = { name, hex: '#' + meta.hex, re: re.source, flags: re.flags, d };
 }
+// Apple Music: Simple Icons' shape includes the rounded square; the real icon is only the beamed note on the tile.
+if (res.applemusic) res.applemusic.d = 'M17.2 3.1a.9.9 0 0 0-.7-.2L9.6 4.3a1 1 0 0 0-.8 1v9.4a3.3 3.3 0 0 0-1.4-.3c-1.6 0-2.9 1-2.9 2.3S5.8 19 7.4 19s2.9-1 2.9-2.4V8.9l5.8-1.2v5.4a3.3 3.3 0 0 0-1.4-.3c-1.6 0-2.9 1-2.9 2.3s1.3 2.4 2.9 2.4 2.9-1 2.9-2.4V3.8a.9.9 0 0 0-.4-.7z';
+
 // Full-colour official logos (scripts/brand-art) for brands whose real icon has several colours.
 const ART = {};
 for (const id of ['chrome', 'firefox', 'meet', 'itunes']) {
@@ -54,6 +57,7 @@ function brandOf(...texts) {
 // The brand's logo as an SVG, in white (or a colour) on transparent.
 // Where a brand's real icon isn't a flat colour, match the real one: tile colour and logo colour (or gradient).
 const BRAND_STYLE = {
+  applemusic: { bg: 'linear-gradient(180deg,#fb5c74,#fa233b)', fg: '#ffffff' },                // white note on Apple's pink-red
   netflix: { bg: '#141414', fg: '#e50914' },                                                   // red N on Netflix black
   openai: { bg: '#ffffff', fg: '#000000' },                                                    // black knot on white
   gemini: { bg: '#1e1f24', fg: ['#1ba1e3', '#5489d6', '#9b72cb', '#d96570', '#f49c46'] },        // Gemini's gradient sparkle
