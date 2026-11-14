@@ -37,10 +37,29 @@ function brandOf(...texts) {
   return '';
 }
 // The brand's logo as an SVG, in white (or a colour) on transparent.
-const brandSvg = (id, size = '62%', fill = '#fff') => (BRANDS[id] ? \`<svg viewBox="0 0 24 24" width="\${size}" height="\${size}" aria-hidden="true"><path fill="\${fill}" d="\${BRANDS[id].d}"/></svg>\` : '');
+// Where a brand's real icon isn't a flat colour, match the real one: tile colour and logo colour (or gradient).
+const BRAND_STYLE = {
+  openai: { bg: '#ffffff', fg: '#000000' },                                                    // black knot on white
+  gemini: { bg: '#1e1f24', fg: ['#1ba1e3', '#5489d6', '#9b72cb', '#d96570', '#f49c46'] },        // Gemini's gradient sparkle
+  claude: { bg: '#d97757', fg: '#ffffff' },
+  copilot: { bg: '#ffffff', fg: '#000000' },
+  tidal: { bg: '#ffffff', fg: '#000000' },
+};
+let brandGrad = 0;
+const brandSvg = (id, size = '62%', fill = '#fff') => {
+  if (!BRANDS[id]) return '';
+  // A list of colours means a gradient (top-left to bottom-right), like Gemini's sparkle.
+  if (Array.isArray(fill)) {
+    const gid = 'bg' + (++brandGrad);
+    const stops = fill.map((c, i) => \`<stop offset="\${(i / (fill.length - 1)).toFixed(2)}" stop-color="\${c}"/>\`).join('');
+    return \`<svg viewBox="0 0 24 24" width="\${size}" height="\${size}" aria-hidden="true"><defs><linearGradient id="\${gid}" x1="0" y1="0" x2="1" y2="1">\${stops}</linearGradient></defs><path fill="url(#\${gid})" d="\${BRANDS[id].d}"/></svg>\`;
+  }
+  return \`<svg viewBox="0 0 24 24" width="\${size}" height="\${size}" aria-hidden="true"><path fill="\${fill}" d="\${BRANDS[id].d}"/></svg>\`;
+};
 // Dark logos (black brands) read better as white on their own tile; very light brand colours get a dark tile.
 function brandTile(id) {
   const b = BRANDS[id]; if (!b) return null;
+  if (BRAND_STYLE[id]) return BRAND_STYLE[id];
   const n = parseInt(b.hex.slice(1), 16), lum = (0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255;
   return lum < 0.12 ? { bg: '#1c1c22', fg: '#fff' } : lum > 0.85 ? { bg: '#1c1c22', fg: b.hex } : { bg: b.hex, fg: '#fff' };
 }
