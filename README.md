@@ -69,14 +69,14 @@ Sign-in happens in your own browser; tokens are encrypted with Windows' data pro
 <summary><b>Calendar sign-in: app IDs (for whoever builds the installer)</b></summary>
 <br>
 
-Google and Microsoft only let registered apps sign in. Put the IDs in  before building, or
+Google and Microsoft only let registered apps sign in. Put the IDs in `electron/oauth-clients.json` before building, or
 enter your own in Settings › Calendar › Advanced. Calendar links work without any of this.
 
 - **Google:** Google Cloud Console › new project › enable *Google Calendar API* and *Google Tasks API* › OAuth consent
   screen (External; scopes calendar.readonly and tasks) › Credentials › *OAuth client ID* › type **Desktop app**. Copy the
   client ID and secret. Until the consent screen is verified by Google, add testers' emails under *Test users*.
 - **Microsoft:** Azure portal › App registrations › New › *Accounts in any organizational directory and personal Microsoft
-  accounts* › Authentication › add platform **Mobile and desktop applications** with redirect URI  ›
+  accounts* › Authentication › add platform **Mobile and desktop applications** with redirect URI `http://localhost` ›
   API permissions: Calendars.Read, Tasks.ReadWrite, User.Read, offline_access. Copy the Application (client) ID.
 
 </details>
