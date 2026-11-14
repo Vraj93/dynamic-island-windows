@@ -441,9 +441,10 @@ const views = {
     return {
       // A steady width: the island doesn't jump around as the step text changes ("Thinking" -> "Editing main.js");
       // long steps end in "…" and each new step fades in.
-      html: `<div class="v compact" style="gap:10px;width:${AGENT_COMPACT_W}px">${spinner()}
-        <span class="f13 sp ell"><b>${esc(agentName(a))}</b> <span class="m">· ${esc(a.step || 'Thinking')}</span></span>
-        <span class="d f12 tn" data-bind="agentElapsed" data-since="${a.startedAt}">${fmtDur(Date.now() - a.startedAt)}</span>
+      // Just the spinner, who, and how long: the steps are in the expanded view. A steady width, so it never jumps.
+      html: `<div class="v compact" style="gap:10px">${spinner()}
+        <span class="f13 ell" style="font-weight:700;max-width:180px">${esc(agentName(a))}</span>
+        <span class="d f12 tn" style="min-width:46px;text-align:right" data-bind="agentElapsed" data-since="${a.startedAt}">${fmtDur(Date.now() - a.startedAt)}</span>
         ${others > 0 ? `<span class="src">+${others}</span>` : ''}</div>`,
       radius: 19,
     };
