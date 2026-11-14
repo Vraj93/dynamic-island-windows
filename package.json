@@ -1,7 +1,7 @@
 {
   "name": "dynamic-island",
   "productName": "Dynamic Island",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "A Dynamic Island for Windows: media, timers, AI agent status and quick tools at the top of your screen.",
   "author": "Vraj93",
   "homepage": "https://github.com/Vraj93/dynamic-island-windows",
