@@ -45,7 +45,29 @@ function clean(title, artist) {
   return { t, a };
 }
 
-async function find(song) {
+/* Fallbacks when LRCLIB has nothing. Both give plain (unsynced) lyrics.
+ *  - lyrics.ovh: a free, open lyrics API.
+ *  - Musixmatch: official API, only with your own key (Settings › Media). Free keys return part of each song. */
+const plainResult = (text, source) => {
+  const lines = String(text || '').replace(/\r/g, '').split('\n').map((x) => ({ t: -1, text: x.trim() }));
+  return lines.some((l) => l.text) ? { status: 'ok', synced: false, lines, source } : null;
+};
+async function fromLyricsOvh(t, a) {
+  if (!a) return null;
+  const r = await getJson(`https://api.lyrics.ovh/v1/${encodeURIComponent(a)}/${encodeURIComponent(t)}`).catch(() => null);
+  return r && r.lyrics ? plainResult(r.lyrics.replace(/^Paroles de la chanson.*\n/i, ''), 'lyrics.ovh') : null;
+}
+async function fromMusixmatch(t, a, key) {
+  if (!key) return null;
+  const q = new URLSearchParams({ q_track: t, q_artist: a || '', apikey: key, format: 'json' });
+  const r = await getJson(`https://api.musixmatch.com/ws/1.1/matcher.lyrics.get?${q}`).catch(() => null);
+  const body = r && r.message && r.message.body && r.message.body.lyrics && r.message.body.lyrics.lyrics_body;
+  if (!body) return null;
+  // Free keys add a notice after the visible part; keep the lyrics and drop the notice.
+  return plainResult(body.split(/\n\*{5,}/)[0], 'Musixmatch');
+}
+
+async function find(song, opts = {}) {
   const { t, a } = clean(song.title, song.artist);
   if (!t) return { status: 'none' };
   const key = `${t}|${a}`.toLowerCase();
@@ -63,9 +85,16 @@ async function find(song) {
         .sort((x, y) => (Math.abs((x.duration || 0) - (song.duration || 0)) - Math.abs((y.duration || 0) - (song.duration || 0))) || (!!y.syncedLyrics - !!x.syncedLyrics))[0];
       res = shape(pick);
     }
+    if (res.status === 'ok') res.source = 'LRCLIB';
   } catch (e) {
-    return { status: 'error', error: e.message }; // not cached: try again next time
+    res = { status: 'error', error: e.message };
   }
+  // Nothing (or LRCLIB unreachable): try the other sources.
+  if (res.status === 'none' || res.status === 'error') {
+    const other = (await fromMusixmatch(t, a, opts.musixmatchKey)) || (await fromLyricsOvh(t, a));
+    if (other) res = other;
+  }
+  if (res.status === 'error') return res; // not cached: try again next time
   cache.set(key, res);
   if (cache.size > 200) cache.delete(cache.keys().next().value);
   return res;

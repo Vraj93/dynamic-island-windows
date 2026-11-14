@@ -142,6 +142,10 @@ const SECTIONS = {
       ${item('media', 'Show what\'s playing', 'Cover and sound bars in the island while music or video plays. Right-click the island to hide the current song.')}
       ${item('mediaPeek', 'Announce new songs', 'A short "Now playing" pop-up with the bigger cover when the track changes.', !S.media)}
       ${item('lyrics', 'Lyrics', 'A lyrics button in the player. Only when you open it, the song\'s title, artist, album and length go to LRCLIB, a free lyrics library, once per song. Off: nothing about your music leaves your PC.', !S.media)}
+      <div class="item" style="flex-wrap:wrap;gap:10px"><div class="t" style="flex-basis:100%"><div class="n">Lyrics sources</div>
+        <div class="s">LRCLIB first (lyrics that scroll with the song), then lyrics.ovh (plain text). Optional: add your own free <b>Musixmatch</b> API key from developer.musixmatch.com for one more source; free keys show part of each song.</div></div>
+        <input class="input" id="mxmKey" type="password" placeholder="Musixmatch API key (optional)" value="${esc(S.musixmatchKey || '')}" style="flex:1 1 280px" ${S.lyrics === false ? 'disabled' : ''}>
+        <button class="btn" data-mxm>${S.musixmatchKey ? 'Update' : 'Save'}</button>${S.musixmatchKey ? '<button class="btn" data-mxm-clear>Remove</button>' : ''}</div>
       ${item('liveBars', 'Sound bars follow the music', 'Listens to your PC\'s sound output (it stays on your PC) to move the bars. Off: a gentle animation instead.', !S.media)}
     </div>`,
 
@@ -232,6 +236,8 @@ document.addEventListener('click', async (e) => {
     await refreshClaude();
     return;
   }
+  if (e.target.closest('[data-mxm]')) { host.send({ type: 'set-setting', key: 'musixmatchKey', value: document.getElementById('mxmKey').value.trim() }); return; }
+  if (e.target.closest('[data-mxm-clear]')) { host.send({ type: 'set-setting', key: 'musixmatchKey', value: '' }); return; }
   const mk = e.target.closest('[data-mickey]');
   if (mk) {
     host.send({ type: 'set-setting', key: 'micKey', value: mk.dataset.mickey });

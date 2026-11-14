@@ -50,7 +50,7 @@ function lyricsDrawer() {
   return `<div class="lyr${L.synced ? ' synced' : ''}">
     <div class="lyrbg" style="${artUsable() ? `background-image:url('${state.media.art}')` : `background:${tileColor()}`}"></div>
     <div class="lyrlist" data-lyrlist>${lines}</div>
-    <div class="lyrsrc d f12">Lyrics: LRCLIB</div></div>`;
+    <div class="lyrsrc d f12">Lyrics: ${esc(L.source || 'LRCLIB')}</div></div>`;
 }
 
 Object.assign(actions, {
