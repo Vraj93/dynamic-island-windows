@@ -41,7 +41,7 @@ const UNPACKED_ROOT = path.resolve(UNPACKED, '..');
 const loginArgs = () => (app.isPackaged ? [] : [path.resolve(__dirname, '..')]);
 const crypto = require('crypto');
 
-const WIN_W = 1000;           // big enough for the largest panel plus its shadow
+const WIN_W_MAX = 1440;       // the largest panel plus a side island beside it (the see-through rest lets clicks through)
 const WIN_H = 760;
 const ZONE_W = 320;           // width of the top-edge hover zone, centred
 const ZONE_HOLD_MS = 150;     // how long the mouse must rest there before the sheet opens
@@ -64,6 +64,7 @@ function log(text) {
 
 function windowBounds() {
   const d = screen.getPrimaryDisplay().bounds;
+  const WIN_W = Math.min(WIN_W_MAX, d.width);
   return { x: Math.round(d.x + (d.width - WIN_W) / 2), y: d.y, width: WIN_W, height: WIN_H };
 }
 

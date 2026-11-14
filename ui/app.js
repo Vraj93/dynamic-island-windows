@@ -832,7 +832,11 @@ function updateBubble() {
 }
 function positionBubble() {
   const r = island.getBoundingClientRect();
-  bubble.style.left = (r.right + 16 + 10 + 16) + 'px'; // shoulder + gap + its own shoulder
+  const gap = 16 + 10 + 16; // shoulder + gap + its own shoulder
+  let x = r.right + gap;
+  // No room on the right (a narrow screen): put it on the left of the island instead.
+  if (x + bubble.offsetWidth + 20 > window.innerWidth) x = Math.max(4, r.left - gap - bubble.offsetWidth);
+  bubble.style.left = x + 'px';
 }
 
 /* Tell the main process which areas take clicks. Followed every frame while sizes animate. */
