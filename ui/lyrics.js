@@ -90,3 +90,9 @@ function followLyrics(jump) {
   }
 }
 setInterval(() => { if (state.view === 'mediaExpanded' && state.lyricsOpen) followLyrics(false); }, 250);
+// When the player opens or redraws, go straight to the line being sung.
+const lyrRender = render;
+render = function (name, opts) {
+  lyrRender(name, opts);
+  if (name === 'mediaExpanded' && state.lyricsOpen) requestAnimationFrame(() => followLyrics(true));
+};

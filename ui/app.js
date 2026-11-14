@@ -589,40 +589,41 @@ const views = {
           <span class="dot" style="width:8px;height:8px;border-radius:50%;background:${si.color}"></span>
           <span class="f13 sp" style="font-weight:600">${esc(si.name)}</span><span class="d f12">${esc(s.status)}</span></button>`;
       }).join('')}</div>` : '';
+    // Three parts: the big cover alone on the left; on the right, lyrics on top and the song with its controls below.
+    const lyr = state.lyricsOpen && prefs.lyrics !== false;
     return {
-      html: `<div class="v mexp">
+      html: `<div class="v mexp${lyr ? ' withlyr' : ''}">
         <div class="tint"></div>
-        <div class="row" style="gap:20px;align-items:stretch">
-          <div class="art" style="width:200px;height:200px;border-radius:24px;${artStyle()}">${artInner()}</div>
-          <div class="sp" style="display:flex;flex-direction:column;justify-content:space-between;padding:4px 2px 0 0">
-            <div>
-              <div class="row" style="justify-content:space-between">
-                <${many ? 'button' : 'span'} class="src" ${many ? 'data-act="sources"' : ''}><span style="width:7px;height:7px;border-radius:50%;background:${src.color}"></span>${esc(src.name)}${many ? ' ▾' : ''}</${many ? 'button' : 'span'}>
-                <button class="x" data-act="hideMedia" aria-label="Hide until something else plays" title="Hide until something else plays">${I.close}</button>
-              </div>
-              <div class="ttl" style="margin-top:12px">${esc(m.title || 'Unknown title')}</div>
-              <div class="m f14 ell" style="font-weight:500;margin-top:3px">${esc(m.artist)}</div>
-              ${m.album ? `<div class="d f12 ell" style="margin-top:3px">${esc(m.album)}</div>` : ''}
+        <div class="mgrid">
+          <div class="art mcover" style="${artStyle()}">${artInner()}</div>
+          <div class="mright">
+            <div class="row" style="gap:8px">
+              <${many ? 'button' : 'span'} class="src" ${many ? 'data-act="sources"' : ''}><span style="width:7px;height:7px;border-radius:50%;background:${src.color}"></span>${esc(src.name)}${many ? ' ▾' : ''}</${many ? 'button' : 'span'}>
+              <span class="sp"></span>
+              ${prefs.lyrics !== false ? `<button class="lyrbtn${lyr ? ' on' : ''}" data-act="lyrics" aria-label="Lyrics" title="Lyrics">${I.lyrics}</button>` : ''}
+              <button class="x" data-act="hideMedia" aria-label="Hide until something else plays" title="Hide until something else plays">${I.close}</button>
             </div>
-            ${dur > 0 ? `<div>
-              <div class="seek" data-seek="1" ${m.canSeek ? '' : 'style="cursor:default"'}><div class="line"><b data-bind="mbar" style="width:${(pos / dur) * 100}%"></b></div></div>
-              <div class="times"><span data-bind="mpos">${fmtTrack(pos)}</span><span data-bind="mrem">−${fmtTrack(dur - pos)}</span></div>
-            </div>` : '<div></div>'}
+            ${lyr ? lyricsDrawer() : `<div class="mtitle">
+              <div class="ttl big">${esc(m.title || 'Unknown title')}</div>
+              <div class="m f15 ell" style="font-weight:500;margin-top:6px">${esc(m.artist)}</div>
+              ${m.album ? `<div class="d f13 ell" style="margin-top:3px">${esc(m.album)}</div>` : ''}</div>`}
+            <div class="mbottom">
+              ${lyr ? `<div class="row" style="gap:8px;min-width:0"><span class="f14 ell" style="font-weight:700">${esc(m.title || 'Unknown title')}</span><span class="d f13 ell">${esc(m.artist)}</span></div>` : ''}
+              ${dur > 0 ? `<div>
+                <div class="seek" data-seek="1" ${m.canSeek ? '' : 'style="cursor:default"'}><div class="line"><b data-bind="mbar" style="width:${(pos / dur) * 100}%"></b></div></div>
+                <div class="times"><span data-bind="mpos">${fmtTrack(pos)}</span><span data-bind="mrem">−${fmtTrack(dur - pos)}</span></div>
+              </div>` : ''}
+              <div class="row" style="justify-content:center;gap:18px">
+                <button class="ctl" data-act="media" data-arg="prev" aria-label="Previous" ${m.canPrev ? '' : 'disabled'}>${I.prev(28)}</button>
+                <button class="ctl pl" data-act="media" data-arg="toggle" aria-label="Play or pause">${mediaPlaying() ? I.pause(26) : I.play(26)}</button>
+                <button class="ctl" data-act="media" data-arg="next" aria-label="Next" ${m.canNext ? '' : 'disabled'}>${I.next(28)}</button>
+              </div>
+            </div>
           </div>
         </div>
-        <div class="mctl">
-          <span></span>
-          <div class="row" style="justify-content:center;gap:18px">
-            <button class="ctl" data-act="media" data-arg="prev" aria-label="Previous" ${m.canPrev ? '' : 'disabled'}>${I.prev(28)}</button>
-            <button class="ctl pl" data-act="media" data-arg="toggle" aria-label="Play or pause">${mediaPlaying() ? I.pause(26) : I.play(26)}</button>
-            <button class="ctl" data-act="media" data-arg="next" aria-label="Next" ${m.canNext ? '' : 'disabled'}>${I.next(28)}</button>
-          </div>
-          ${prefs.lyrics !== false ? `<button class="lyrbtn${state.lyricsOpen ? ' on' : ''}" data-act="lyrics" aria-label="Lyrics" title="Lyrics">${I.lyrics}</button>` : '<span></span>'}
-        </div>
-        ${state.lyricsOpen && prefs.lyrics !== false ? lyricsDrawer() : ''}
         ${sources}
       </div>`,
-      radius: 34,
+      radius: 36,
     };
   },
 };
