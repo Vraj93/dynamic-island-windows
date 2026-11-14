@@ -130,6 +130,7 @@ ipcMain.on('ui', (_e, msg) => {
       else if (win.isFocusable()) { win.blur(); win.setFocusable(false); }
       break;
     case 'clip-copy': if (typeof msg.text === 'string') { clipSkip = msg.text; clipboard.writeText(msg.text); } break;
+    case 'clip-list': send({ type: 'clip', items: clipHistory }); break; // the island asks once its clipboard part has loaded
     case 'clip-clear': clipHistory = clipHistory.filter((c) => c.pin); clipChanged(); break; // pinned ones stay
     case 'clip-pin': { const c = clipHistory.find((x) => x.text === msg.text); if (c) { c.pin = !c.pin; clipHistory = clipTrim(clipHistory); clipChanged(); } break; }
     case 'clip-delete': clipHistory = clipHistory.filter((x) => x.text !== msg.text); clipChanged(); break;
@@ -209,6 +210,7 @@ function startMedia() {
         else if (m.type === 'fullscreen') { lastFullscreen = m; send(m); log('fullscreen ' + m.on); }
         else if (m.type === 'sys') send(m);
         else if (m.type === 'privacy') { lastPrivacy = m; send(m); }
+        else if (m.type === 'clip-private') clipPrivate = { at: Date.now(), private: !!m.private };
         else if (m.type === 'media-error') log('media: ' + m.message);
       } catch { log('media (bad line): ' + line.slice(0, 120)); }
     }
@@ -311,6 +313,7 @@ function clipSave() {
       if (settings.clipKeep === false || !clipEnabled) { fs.rmSync(clipFile(), { force: true }); return; }
       if (!safeStorage.isEncryptionAvailable()) return; // never write it unencrypted
       fs.writeFileSync(clipFile(), safeStorage.encryptString(JSON.stringify(clipHistory)));
+      log('clipboard saved: ' + clipHistory.length + ' items');
     } catch (e) { log('clipboard save: ' + e.message); }
   }, 400);
 }
@@ -319,6 +322,7 @@ function clipLoad() {
     if (settings.clipKeep === false || !fs.existsSync(clipFile())) return;
     const list = JSON.parse(safeStorage.decryptString(fs.readFileSync(clipFile())));
     if (Array.isArray(list)) clipHistory = list.filter((c) => c && typeof c.text === 'string').slice(0, CLIP_MAX + PIN_MAX);
+    log('clipboard loaded: ' + clipHistory.length + ' items');
   } catch (e) { log('clipboard load: ' + e.message); }
 }
 function clipTrim(list) {
@@ -326,17 +330,10 @@ function clipTrim(list) {
   return [...pins, ...rest].sort((a, b) => (b.pin ? 1 : 0) - (a.pin ? 1 : 0) || b.at - a.at);
 }
 function clipChanged(fresh) { send({ type: 'clip', items: clipHistory, fresh: !!fresh }); clipSave(); }
-// Password managers (1Password, Bitwarden, KeePass, Dashlane...) and Windows' own rules mark private copies with
-// these clipboard formats; such copies are left out.
-function clipIsPrivate() {
-  try {
-    if (clipboard.has('ExcludeClipboardContentFromMonitorProcessing') || clipboard.has('Clipboard Viewer Ignore')) return true;
-    for (const fmt of ['CanIncludeInClipboardHistory', 'CanUploadToCloudClipboard']) {
-      if (clipboard.has(fmt)) { const b = clipboard.readBuffer(fmt); if (b.length >= 4 && b.readUInt32LE(0) === 0) return true; }
-    }
-  } catch { /* can't tell: treat as normal */ }
-  return false;
-}
+// Password managers (1Password, Bitwarden, KeePass, Dashlane...) mark private copies with special clipboard
+// formats. Electron can't see those, so the PowerShell helper checks every new copy and reports it here.
+let clipPrivate = { at: 0, private: false };
+const clipIsPrivate = () => clipPrivate.private && Date.now() - clipPrivate.at < 10000;
 let clipLast = '';
 let clipSkip = '';
 let clipEnabled = true;
@@ -351,6 +348,8 @@ async function pollClipboard() {
   clipLast = text;
   if (text === clipSkip) { clipSkip = ''; return; } // the island itself just copied this
   if (text.length > 20000) return;
+  // Give the helper a moment to report on this copy, then leave it out if it's private.
+  await new Promise((r) => setTimeout(r, 300));
   if (clipIsPrivate()) return;
   const was = clipHistory.find((c) => c.text === text);
   clipHistory = clipTrim([{ text, at: Date.now(), pin: !!(was && was.pin) }, ...clipHistory.filter((c) => c.text !== text)]);

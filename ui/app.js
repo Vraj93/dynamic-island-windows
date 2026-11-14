@@ -443,7 +443,7 @@ const views = {
       // long steps end in "…" and each new step fades in.
       // Just the spinner, who, and how long: the steps are in the expanded view. A steady width, so it never jumps.
       html: `<div class="v compact" style="gap:10px">${spinner()}
-        <span class="f13 ell" style="font-weight:700;max-width:180px">${esc(agentName(a))}</span>
+        <span class="f13 ell" style="font-weight:700;max-width:180px;flex-shrink:0">${esc(agentName(a))}</span>
         <span class="d f12 tn" style="min-width:46px;text-align:right" data-bind="agentElapsed" data-since="${a.startedAt}">${fmtDur(Date.now() - a.startedAt)}</span>
         ${others > 0 ? `<span class="src">+${others}</span>` : ''}</div>`,
       radius: 19,
@@ -696,7 +696,8 @@ function render(name, { animate } = {}) {
   lastHtml = v.html;
   measurer.innerHTML = v.html;
   const root = measurer.firstElementChild;
-  const w = root.offsetWidth, h = root.offsetHeight;
+  // Round up, so text is never cut by a fraction of a pixel ("Claude Co…").
+  const box = root.getBoundingClientRect(), w = Math.ceil(box.width), h = Math.ceil(box.height);
 
   if (island.classList.contains('gone')) {
     // Coming back from hidden: start from the small lip, never from the last panel size.

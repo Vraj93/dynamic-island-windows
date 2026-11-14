@@ -658,6 +658,7 @@ if (host) {
     }
   });
   post({ type: 'settings', settings: T.settings });
+  post({ type: 'clip-list' }); // the saved clipboard history (arrives as a 'clip' message)
   host.invoke('claude-hooks', 'status').then((s) => { T.claudeStatus = s; });
 }
 // Files on the shelf that were moved or deleted drop off.

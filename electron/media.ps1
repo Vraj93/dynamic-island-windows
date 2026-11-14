@@ -115,6 +115,19 @@ public static class IslandSys {
     public static int MicMuted() {
         try { var v = Mic(2) ?? Mic(0); if (v == null) return -1; bool m; v.GetMute(out m); return m ? 1 : 0; } catch { return -1; }
     }
+    // Clipboard privacy: password managers (and apps copying secrets) add one of these formats to say
+    // "don't record this". Electron can't see custom formats, so the helper checks them for the island.
+    [DllImport("user32.dll")] static extern uint GetClipboardSequenceNumber();
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern uint RegisterClipboardFormat(string name);
+    [DllImport("user32.dll")] static extern bool IsClipboardFormatAvailable(uint fmt);
+    static uint[] privFormats;
+    public static uint ClipSeq() { return GetClipboardSequenceNumber(); }
+    public static bool ClipPrivate() {
+        if (privFormats == null) privFormats = new[] { RegisterClipboardFormat("ExcludeClipboardContentFromMonitorProcessing"),
+            RegisterClipboardFormat("Clipboard Viewer Ignore"), RegisterClipboardFormat("CanIncludeInClipboardHistory") };
+        foreach (var f in privFormats) if (f != 0 && IsClipboardFormatAvailable(f)) return true;
+        return false;
+    }
     public static int SetMic(int mode) { // mode: 1 mute, 0 unmute, 2 toggle
         try {
             int cur = MicMuted(); if (cur < 0) return -1;
@@ -411,6 +424,7 @@ function Publish-Privacy {
 $stdin = New-Object System.IO.StreamReader([Console]::OpenStandardInput(), [System.Text.Encoding]::UTF8)
 $pending = $stdin.ReadLineAsync()
 $tickCount = 0
+$clipSeq = [uint32]0
 Out-Json @{ type = 'media-ready' }
 
 while ($true) {
@@ -421,6 +435,9 @@ while ($true) {
             if ($line) { Run-Command $line }
             $pending = $stdin.ReadLineAsync()
         }
+        # Something new on the clipboard: say whether it's marked private (the island then won't record it).
+        $cs = [IslandSys]::ClipSeq()
+        if ($cs -ne $clipSeq) { $clipSeq = $cs; Out-Json @{ type = 'clip-private'; seq = [long]$cs; private = [IslandSys]::ClipPrivate() } }
         # Volume and Caps Lock every 120 ms so the pop-up feels instant; media and full screen every ~0.5 s.
         Publish-System
         if (($tickCount++ % 4) -eq 0) {
