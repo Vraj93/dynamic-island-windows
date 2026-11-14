@@ -384,20 +384,25 @@ actions.clearNote = () => { T.note = ''; store.set('note', ''); render('note'); 
 /* ---------------- clipboard ---------------- */
 views.clipboard = () => {
   if (!T.settings.clipboard) return panel(`${head('Clipboard')}<div class="m f13">Clipboard history is off. Turn it on in Settings.</div>`);
-  const items = T.clip.slice(0, 12).map((c, i) => {
+  const items = T.clip.slice(0, 40).map((c, i) => {
     const t = c.text.trim(), kind = /^https?:\/\//i.test(t) ? 'LINK' : /[{};=<>]|\b(npm|git|const|function)\b/.test(t) ? 'CODE' : 'TEXT';
-    return `<button class="clip" data-act="clipCopy" data-arg="${i}"><span class="ty">${kind}</span>
+    return `<div class="clip${c.pin ? ' pinned' : ''}" data-act="clipCopy" data-arg="${i}" role="button" tabindex="0"><span class="ty">${kind}</span>
       <span class="sp ell" style="${kind === 'CODE' ? "font-family:Consolas,'Cascadia Mono',monospace;font-size:12px" : ''}${kind === 'LINK' ? ';color:#8ac4ff' : ''}">${esc(t.replace(/\s+/g, ' ').slice(0, 200))}</span>
-      <span class="d f12">${fmtAgo(c.at)}</span></button>`;
+      <span class="d f12">${c.pin ? '' : fmtAgo(c.at)}</span>
+      <button class="cbtn${c.pin ? ' on' : ''}" data-act="clipPin" data-arg="${i}" aria-label="${c.pin ? 'Unpin' : 'Pin'}" title="${c.pin ? 'Unpin' : 'Pin: keep it for good'}">${I.pinClip}</button>
+      <button class="cbtn" data-act="clipDelete" data-arg="${i}" aria-label="Delete" title="Delete">${I.close}</button></div>`;
   }).join('');
-  return panel(`${head('Clipboard', T.clip.length ? '<button class="btn sm" data-act="clipClear">Clear</button>' : '')}
+  const unpinned = T.clip.filter((c) => !c.pin).length;
+  return panel(`${head('Clipboard', unpinned ? '<button class="btn sm" data-act="clipClear">Clear</button>' : '')}
     ${items ? `<div style="display:flex;flex-direction:column;gap:6px;max-height:360px;overflow:auto">${items}</div>` : '<div class="m f13" style="padding:6px 4px">Copy some text and it shows up here.</div>'}
-    <div class="d f12">Click an item to copy it again. Kept in memory only; it's gone when the island closes.</div>`, 520);
+    <div class="d f12">Click an item to copy it again. Pin one to keep it for good; Clear keeps pinned items. ${T.settings.clipKeep === false ? 'Forgotten when the island closes.' : 'Kept after a restart, encrypted for your Windows account.'} Copies from password managers are never kept.</div>`, 540);
 };
 function fmtAgo(at) { const s = Math.floor((Date.now() - at) / 1000); return s < 60 ? 'now' : s < 3600 ? Math.floor(s / 60) + 'm' : Math.floor(s / 3600) + 'h'; }
 Object.assign(actions, {
   clipCopy(i) { const c = T.clip[+i]; if (!c) return; post({ type: 'clip-copy', text: c.text }); render(baseView()); showHud({ kind: 'caps', on: true, label: 'Copied' }); },
   clipClear() { post({ type: 'clip-clear' }); },
+  clipPin(i) { const c = T.clip[+i]; if (c) post({ type: 'clip-pin', text: c.text }); },
+  clipDelete(i) { const c = T.clip[+i]; if (c) post({ type: 'clip-delete', text: c.text }); },
 });
 // The "Copied" pop-up reuses the small text pop-up.
 const coreHud = views.hud;
@@ -662,3 +667,4 @@ if (host) {
   for (const f of T.shelf) { const i = await host.invoke('file-info', f.path); if (i && i.ok) kept.push({ ...f, icon: i.icon }); }
   T.shelf = kept; store.set('shelf', kept);
 })();
+I.pinClip = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v5M9 3h6l-1 6 4 4H6l4-4z"/></svg>';

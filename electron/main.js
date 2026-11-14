@@ -15,6 +15,14 @@ if (process.argv.includes('--agent-hook') || process.argv.includes('--island')) 
   require('./hooks/agent-hook.js');
   return;
 }
+// Uninstall: take our hooks out of every agent's settings, so nothing is left behind (run by the uninstaller).
+if (process.argv.includes('--disconnect-agents')) {
+  try {
+    const { AGENTS } = require('../scripts/agent-hooks.js');
+    for (const a of Object.values(AGENTS)) { try { if (a.connected()) a.disconnect(); } catch { /* leave that one */ } }
+  } catch { /* nothing to undo */ }
+  process.exit(0);
+}
 
 const { app, BrowserWindow, Tray, Menu, ipcMain, screen, nativeImage, session, desktopCapturer, clipboard, shell, dialog, powerMonitor, globalShortcut } = require('electron');
 const calendar = require('./calendar.js');
@@ -104,6 +112,7 @@ ipcMain.on('ui', (_e, msg) => {
       if (lastFullscreen) send(lastFullscreen);
       send(calendar.snapshot());
       if (lastPrivacy) send(lastPrivacy);
+      if (clipHistory.length) send({ type: 'clip', items: clipHistory });
       send({ type: 'mic-key-active', key: micKeyOn });
       // Development only: ISLAND_TEST_SCRIPT=<file.js> runs that script in the UI (used to test drag-and-drop screens).
       if (process.env.ISLAND_TEST_SCRIPT && fs.existsSync(process.env.ISLAND_TEST_SCRIPT)) {
@@ -121,7 +130,9 @@ ipcMain.on('ui', (_e, msg) => {
       else if (win.isFocusable()) { win.blur(); win.setFocusable(false); }
       break;
     case 'clip-copy': if (typeof msg.text === 'string') { clipSkip = msg.text; clipboard.writeText(msg.text); } break;
-    case 'clip-clear': clipHistory = []; send({ type: 'clip', items: clipHistory }); break;
+    case 'clip-clear': clipHistory = clipHistory.filter((c) => c.pin); clipChanged(); break; // pinned ones stay
+    case 'clip-pin': { const c = clipHistory.find((x) => x.text === msg.text); if (c) { c.pin = !c.pin; clipHistory = clipTrim(clipHistory); clipChanged(); } break; }
+    case 'clip-delete': clipHistory = clipHistory.filter((x) => x.text !== msg.text); clipChanged(); break;
     case 'settings':
       // Older builds kept settings in the island; adopt them once if there's no settings file yet.
       if (!settingsFromDisk && msg.settings && typeof msg.settings === 'object') {
@@ -284,8 +295,48 @@ function closePermission(reqId, decision) {
   if (!decision) send({ type: 'agent-permission-gone', reqId });
 }
 
-/* ---------- clipboard history: text you copy, kept in memory only (never written to disk) ---------- */
-let clipHistory = [];
+/* ---------- clipboard history ----------
+ * Text you copy, newest first. Kept after a restart (encrypted for your Windows account with safeStorage) unless
+ * "Remember after restart" is off. Pinned items stay until you unpin them. Copies from password managers, and from
+ * any app that marks its copy as private, are never recorded. */
+const { safeStorage } = require('electron');
+let clipHistory = [];   // { text, at, pin }
+const CLIP_MAX = 30, PIN_MAX = 50;
+const clipFile = () => path.join(app.getPath('userData'), 'clipboard.dat');
+let clipSaveTimer = null;
+function clipSave() {
+  clearTimeout(clipSaveTimer);
+  clipSaveTimer = setTimeout(() => {
+    try {
+      if (settings.clipKeep === false || !clipEnabled) { fs.rmSync(clipFile(), { force: true }); return; }
+      if (!safeStorage.isEncryptionAvailable()) return; // never write it unencrypted
+      fs.writeFileSync(clipFile(), safeStorage.encryptString(JSON.stringify(clipHistory)));
+    } catch (e) { log('clipboard save: ' + e.message); }
+  }, 400);
+}
+function clipLoad() {
+  try {
+    if (settings.clipKeep === false || !fs.existsSync(clipFile())) return;
+    const list = JSON.parse(safeStorage.decryptString(fs.readFileSync(clipFile())));
+    if (Array.isArray(list)) clipHistory = list.filter((c) => c && typeof c.text === 'string').slice(0, CLIP_MAX + PIN_MAX);
+  } catch (e) { log('clipboard load: ' + e.message); }
+}
+function clipTrim(list) {
+  const pins = list.filter((c) => c.pin).slice(0, PIN_MAX), rest = list.filter((c) => !c.pin).slice(0, CLIP_MAX);
+  return [...pins, ...rest].sort((a, b) => (b.pin ? 1 : 0) - (a.pin ? 1 : 0) || b.at - a.at);
+}
+function clipChanged(fresh) { send({ type: 'clip', items: clipHistory, fresh: !!fresh }); clipSave(); }
+// Password managers (1Password, Bitwarden, KeePass, Dashlane...) and Windows' own rules mark private copies with
+// these clipboard formats; such copies are left out.
+function clipIsPrivate() {
+  try {
+    if (clipboard.has('ExcludeClipboardContentFromMonitorProcessing') || clipboard.has('Clipboard Viewer Ignore')) return true;
+    for (const fmt of ['CanIncludeInClipboardHistory', 'CanUploadToCloudClipboard']) {
+      if (clipboard.has(fmt)) { const b = clipboard.readBuffer(fmt); if (b.length >= 4 && b.readUInt32LE(0) === 0) return true; }
+    }
+  } catch { /* can't tell: treat as normal */ }
+  return false;
+}
 let clipLast = '';
 let clipSkip = '';
 let clipEnabled = true;
@@ -300,8 +351,10 @@ async function pollClipboard() {
   clipLast = text;
   if (text === clipSkip) { clipSkip = ''; return; } // the island itself just copied this
   if (text.length > 20000) return;
-  clipHistory = [{ text, at: Date.now() }, ...clipHistory.filter((c) => c.text !== text)].slice(0, 25);
-  send({ type: 'clip', items: clipHistory, fresh: true });
+  if (clipIsPrivate()) return;
+  const was = clipHistory.find((c) => c.text === text);
+  clipHistory = clipTrim([{ text, at: Date.now(), pin: !!(was && was.pin) }, ...clipHistory.filter((c) => c.text !== text)]);
+  clipChanged(true);
 }
 
 /* ---------- settings: saved in settings.json, edited in the Settings window, applied everywhere ---------- */
@@ -317,7 +370,8 @@ const DEFAULT_SETTINGS = {
   agents: true,           // Claude Code status and approvals
   volumeKeys: true,       // island handles the volume keys (hides Windows' pop-up)
   hudVolume: true, hudBrightness: true, hudCaps: true, hudBattery: true,
-  clipboard: true,        // clipboard history (memory only)
+  clipboard: true,        // clipboard history
+  clipKeep: true,         // keep it after a restart (encrypted for your Windows account)
   chimes: true,           // sounds for timers, alarms, reminders, agents
   hideFullscreen: true,   // step aside for full-screen video and games (alerts still show)
   startWithWindows: false,
@@ -377,7 +431,8 @@ function applySettings(s) {
   settings = s;
   broadcastSettings();
   clipEnabled = s.clipboard !== false;
-  if (!clipEnabled) clipHistory = [];
+  if (!clipEnabled) { clipHistory = []; clipSave(); }
+  else if (s.clipKeep === false) clipSave(); // forget the saved copy now
   mediaCommand(s.volumeKeys === false ? 'volkeys off' : 'volkeys on');
   applyMicKey(s.micKey);
   // Start with Windows: run this same Electron with this app folder (works with Smart App Control on).
@@ -594,6 +649,7 @@ if (!app.requestSingleInstanceLock()) {
         .catch(() => callback({}));
     });
     loadSettings();
+    clipLoad();
     createWindow();
     createTray();
     startMedia();

@@ -163,7 +163,7 @@ const artInner = () => {
   const letter = esc((String((state.media && state.media.title) || '').trim()[0] || '♪').toUpperCase());
   return `<svg viewBox="0 0 10 10" width="100%" height="100%" aria-hidden="true"><text x="5" y="7.1" text-anchor="middle" font-size="6.4" font-weight="700" fill="#fff" font-family="Segoe UI Variable Display,Segoe UI,sans-serif">${letter}</text></svg>`;
 };
-const eq = () => `<span class="eq${mediaPlaying() ? '' : ' off'}"><i></i><i></i><i></i><i></i><i></i></span>`;
+const eq = () => `<span class="eq${mediaPlaying() ? '' : ' off'}">${'<i></i>'.repeat(7)}</span>`;
 
 /* Pick a lively colour from the album art for the sound bars and the tint. */
 function extractColor(src) {
@@ -880,8 +880,9 @@ setInterval(tick, 250);
  * Listens to the PC's sound output (Windows "loopback"), splits it into 5 frequency bands
  * (bass on the left, treble on the right) and moves the bars with them. Runs only while
  * something is playing; if listening isn't possible, the bars fall back to a gentle animation. */
-const viz = { stream: null, ctx: null, analyser: null, data: null, raf: 0, starting: false, failedAt: 0, quietSince: 0, lv: [0, 0, 0, 0, 0], peak: [1, 1, 1, 1, 1], last: 0 };
-const BANDS = [[1, 3], [3, 8], [8, 20], [20, 50], [50, 120]]; // analyser bins (~94 Hz each)
+const viz = { stream: null, ctx: null, analyser: null, data: null, raf: 0, starting: false, failedAt: 0, quietSince: 0, lv: Array(7).fill(0), peak: Array(7).fill(1), prev: Array(7).fill(0), last: 0 };
+// Seven bands from bass to treble, spaced like hearing (analyser bins are ~94 Hz each).
+const BANDS = [[1, 2], [2, 4], [4, 7], [7, 12], [12, 22], [22, 45], [45, 110]];
 
 async function startViz() {
   if (viz.stream || viz.starting || Date.now() - viz.failedAt < 60000 || !navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) return;
@@ -894,7 +895,7 @@ async function startViz() {
     viz.ctx = new AudioContext();
     viz.analyser = viz.ctx.createAnalyser();
     viz.analyser.fftSize = 512;
-    viz.analyser.smoothingTimeConstant = 0.55;
+    viz.analyser.smoothingTimeConstant = 0.25; // little smoothing: the bars follow the beat
     viz.ctx.createMediaStreamSource(stream).connect(viz.analyser);
     viz.data = new Uint8Array(viz.analyser.frequencyBinCount);
     document.body.classList.add('liveviz');
@@ -916,7 +917,6 @@ function stopViz() {
 
 function vizLoop(t = 0) {
   viz.raf = requestAnimationFrame(vizLoop);
-  if (t - viz.last < 33) return; // ~30 fps is plenty
   viz.last = t;
   viz.analyser.getByteFrequencyData(viz.data);
   BANDS.forEach(([a, b], i) => {
@@ -924,13 +924,16 @@ function vizLoop(t = 0) {
     for (let k = a; k < b; k++) sum += viz.data[k];
     const raw = sum / (b - a) / 255;
     // Auto-gain per band: compare with a slowly falling recent peak, so quiet and loud songs both move.
-    viz.peak[i] = Math.max(raw, viz.peak[i] * 0.995, 0.08);
-    const target = Math.min(1, raw / viz.peak[i]) * (raw > 0.02 ? 1 : 0);
-    // Fast rise, slower fall: looks like a real meter.
-    viz.lv[i] += (target - viz.lv[i]) * (target > viz.lv[i] ? 0.6 : 0.25);
+    viz.peak[i] = Math.max(raw, viz.peak[i] * 0.985, 0.06);
+    let target = Math.min(1, raw / viz.peak[i]) * (raw > 0.015 ? 1 : 0);
+    // A sudden rise (a beat, a drum hit) kicks the bar a little higher.
+    target = Math.min(1, target + Math.max(0, raw - viz.prev[i]) * 3);
+    viz.prev[i] = raw;
+    // Snap up, fall back quickly: lively like a real meter.
+    viz.lv[i] += (target - viz.lv[i]) * (target > viz.lv[i] ? 0.85 : 0.32);
   });
   const bars = document.querySelectorAll('.eq i');
-  bars.forEach((el, j) => { el.style.transform = `scaleY(${(0.18 + 0.82 * viz.lv[j % 5]).toFixed(3)})`; });
+  bars.forEach((el, j) => { el.style.transform = `scaleY(${(0.12 + 0.88 * viz.lv[j % 7]).toFixed(3)})`; });
 }
 
 /* Start listening while music plays; stop after it has been quiet for a while (saves CPU). */

@@ -68,7 +68,8 @@ const SECTIONS = {
     <div class="card">
       ${item('hideFullscreen', 'Step aside for full-screen apps', 'While a video, game or slideshow is full screen, only alerts show (approvals, alarms, timers, reminders).')}
       ${item('chimes', 'Sounds', 'Chimes for timers, alarms, reminders, Focus and Claude Code.')}
-      ${item('clipboard', 'Clipboard history', 'Remembers the last 25 pieces of text you copy. Kept in memory only, never saved to disk.')}
+      ${item('clipboard', 'Clipboard history', 'Remembers the last 30 pieces of text you copy (pinned ones stay until you unpin them). Copies from password managers are never kept.')}
+      ${item('clipKeep', 'Keep clipboard history after a restart', 'Saved encrypted for your Windows account, on this PC only. Off: forgotten when the island closes.', !S.clipboard)}
       ${item('startWithWindows', 'Start with Windows', 'Open the island when you sign in.')}
     </div>`,
 
