@@ -33,17 +33,30 @@ steals your keyboard.
 
 ## Music and video
 
+<img src="docs/images/lyrics.png" width="760" alt="The player: big cover on the left, synced lyrics and controls on the right">
+
+**Anything Windows knows is playing**: Spotify, Apple Music or YouTube in a browser, and more. A big cover, sound bars
+that move with the actual audio, drag to seek, switching between apps, and **lyrics that scroll with the song**
+(from LRCLIB, with lyrics.ovh and your own Musixmatch key as backups). When a site sends no cover, the island finds it
+(iTunes, Deezer, MusicBrainz) or shows the service's logo: Netflix, Prime Video, Twitch... VLC shows what it's playing.
+
 <table>
 <tr>
-<td width="50%"><img src="docs/images/player.png" alt="Expanded music player"></td>
-<td width="50%"><img src="docs/images/compact.png" alt="Compact music island with a timer next to it"><br><br>
-<b>Anything Windows knows is playing</b>: Spotify, YouTube in a browser, VLC and more.<br><br>
-Real cover art, sound bars that move with the actual audio, play / pause / next / previous, drag to seek, and
-switching between apps. A timer gets its own small island next to the music. Right-click to hide.</td>
+<td width="50%"><img src="docs/images/compact.png" alt="Music island with a timer in its own small island"></td>
+<td width="50%"><img src="docs/images/twothings.png" alt="An agent working, with the music in a small island beside it"></td>
+</tr>
+<tr>
+<td><b>Two things at once</b>: a timer gets its own small island next to the music.</td>
+<td>While an agent works, the music moves to the small island.</td>
 </tr>
 </table>
 
 ## AI agents, right in the island
+
+<img src="docs/images/agentlive.png" width="760" alt="Agent panel: big timer, the change being made, and Read / Edit / Test / Done">
+
+Claude Code, GitHub Copilot CLI, Gemini CLI, Cursor and Codex connect from Settings in one click, no Node.js needed.
+The panel shows how long it's been working, the code change it's making right now, and how far along it is.
 
 <table>
 <tr>
@@ -56,7 +69,6 @@ switching between apps. A timer gets its own small island next to the music. Rig
 </tr>
 </table>
 
-<img src="docs/images/agent.png" width="49%" alt="Claude Code working, shown in the compact island">
 
 ### Any other agent, script or build tool
 
@@ -78,6 +90,14 @@ Your week shows in the sheet, and a heads-up drops down a few minutes before eac
 Meet, Teams and Zoom. Reminders can sync both ways with **Google Tasks** or **Microsoft To Do**, so they reach your phone.
 Sign-in happens in your own browser; tokens are encrypted with Windows' data protection and stay on your PC.
 
+<table>
+<tr>
+<td width="50%"><img src="docs/images/calendar.png" alt="Month view with the day's events and a Join button"></td>
+<td width="50%"><img src="docs/images/event.png" alt="Heads-up before a meeting with Join Teams"><br><br>
+<img src="docs/images/calnew.png" alt="Adding an event with any start and end time"></td>
+</tr>
+</table>
+
 <details>
 <summary><b>Calendar sign-in: app IDs (for whoever builds the installer)</b></summary>
 <br>
@@ -93,6 +113,21 @@ enter your own in Settings › Calendar › Advanced. Calendar links work withou
   API permissions: Calendars.Read, Tasks.ReadWrite, User.Read, offline_access. Copy the Application (client) ID.
 
 </details>
+
+## Calls and privacy
+
+<table>
+<tr>
+<td width="50%"><img src="docs/images/call.png" alt="Call timer with camera on and a mute button"><br><br>
+<img src="docs/images/sheetvol.png" alt="Volume pop-up beside an open panel"></td>
+<td width="50%"><img src="docs/images/callmuted.png" alt="Call panel with the microphone muted"></td>
+</tr>
+<tr>
+<td>A <b>call timer</b> while any app uses the microphone, and dots for microphone, camera and screen capture.
+Pop-ups show beside an open panel instead of covering it.</td>
+<td><b>One key mutes your microphone in every app</b> (Ctrl+Alt+M, or another you pick).</td>
+</tr>
+</table>
 
 ## Timers, alarms and focus
 
@@ -134,7 +169,8 @@ enter your own in Settings › Calendar › Advanced. Calendar links work withou
 </tr>
 </table>
 
-Also: **clipboard history**, a **quick note**, and a **stopwatch**.
+Also: **clipboard history** (kept after a restart, encrypted, with pins; password-manager copies are never kept), a
+**quick note**, and a **stopwatch**.
 
 ## Settings
 
@@ -248,6 +284,7 @@ from `scripts/make-icons.ps1`.
 - HEIC pictures need the free "HEIF Image Extensions" from the Microsoft Store; WEBP and HEIC can't be written.
 - Brightness only works for a laptop's built-in screen.
 - Not built yet: Windows notifications in the island, Bluetooth / Wi-Fi pop-ups.
+- Brand logos come from [Simple Icons](https://simpleicons.org) (CC0); names and logos belong to their owners.
 
 ## License
 

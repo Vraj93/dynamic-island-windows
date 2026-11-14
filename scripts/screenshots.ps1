@@ -12,9 +12,12 @@ $settings = ([Uri](Join-Path $root 'ui\settings.html')).AbsoluteUri
 
 # scene = window height (CSS px) that fits the island plus some wallpaper below it
 $scenes = [ordered]@{
-  sheet = 500; player = 330; compact = 110; agent = 110; approval = 330; finished = 400; timer = 280; timesup = 120;
-  volume = 110; focus = 330; reminders = 430; alarm = 400; drop = 290; shelf = 320; convert = 380; clipboard = 330
+  sheet = 560; player = 460; lyrics = 460; compact = 110; twothings = 110; agent = 110; agentlive = 330; approval = 330; finished = 400;
+  calendar = 470; calnew = 500; event = 190; call = 110; callmuted = 340; sheetvol = 200; brands = 540;
+  timer = 280; timesup = 120; volume = 110; focus = 330; reminders = 430; alarm = 400; drop = 290; shelf = 320; convert = 380; clipboard = 330
 }
+# Wide panels (the player, a pop-up beside the sheet) need a wider window.
+$wide = 'player', 'lyrics', 'sheetvol'
 function Shot($url, $file, $w, $h) {
   $profile = Join-Path $env:TEMP "island-shots-$([guid]::NewGuid())"
   # Edge prints harmless warnings on stderr; don't let them stop the script.
@@ -25,10 +28,10 @@ function Shot($url, $file, $w, $h) {
   Remove-Item $profile -Recurse -Force -ErrorAction SilentlyContinue
 }
 foreach ($s in $scenes.Keys) {
-  Shot "$ui#demo=$s" (Join-Path $out "$s.png") 860 $scenes[$s]
+  Shot "$ui#demo=$s" (Join-Path $out "$s.png") $(if ($wide -contains $s) { 1100 } else { 940 }) $scenes[$s]
   Write-Host "captured $s"
 }
-foreach ($sec in 'general', 'agents') {
-  Shot "$settings#sec=$sec" (Join-Path $out "settings-$sec.png") 980 620
+foreach ($sec in 'general', 'agents', 'calendar', 'media') {
+  Shot "$settings#sec=$sec" (Join-Path $out "settings-$sec.png") 980 760
   Write-Host "captured settings-$sec"
 }
