@@ -24,6 +24,21 @@ for (const [id, [slug, name, re]] of Object.entries(WANT)) {
   if (!d || !meta) { console.log('skip', id); continue; }
   res[id] = { name, hex: '#' + meta.hex, re: re.source, flags: re.flags, d };
 }
+// Full-colour official logos (scripts/brand-art) for brands whose real icon has several colours.
+const ART = {};
+for (const id of ['chrome', 'firefox', 'meet', 'itunes']) {
+  let svg = fs.readFileSync(path.join(__dirname, 'brand-art', id + '.svg'), 'utf8')
+    .replace(/<\?xml[^>]*\?>/, '').replace(/<!--[\s\S]*?-->/g, '').replace(/\s+/g, ' ').trim();
+  // Size comes from the island, not the file. A file sized only by width/height (Firefox) gets a matching viewBox.
+  svg = svg.replace(/<svg([^>]*)>/, (m, attrs) => {
+    const w = (attrs.match(/\swidth="([\d.]+)/) || [])[1], h = (attrs.match(/\sheight="([\d.]+)/) || [])[1];
+    let a = attrs.replace(/\s(width|height|enable-background|x|y|xml:space|id)="[^"]*"/g, '');
+    if (!/viewBox=/.test(a) && w && h) a += ` viewBox="0 0 ${w} ${h}"`;
+    return '<svg' + a + '>';
+  });
+  ART[id] = svg;
+}
+
 const body = `'use strict';
 /* Brand icons for well-known apps, streaming services and AI agents, shown when an app or site sends no artwork
  * (Netflix in Chrome, VLC...) and for agents. Shapes and colours from Simple Icons (https://simpleicons.org),
@@ -45,8 +60,17 @@ const BRAND_STYLE = {
   copilot: { bg: '#ffffff', fg: '#000000' },
   tidal: { bg: '#ffffff', fg: '#000000' },
 };
+// Official full-colour logos (Chrome, Firefox, Google Meet, iTunes): drawn as they are, on a white tile.
+const BRAND_ART = ${JSON.stringify(ART)};
+for (const id of Object.keys(BRAND_ART)) BRAND_STYLE[id] = { bg: '#ffffff', fg: 'art' };
 let brandGrad = 0;
 const brandSvg = (id, size = '62%', fill = '#fff') => {
+  if (BRAND_ART[id]) {
+    // Each copy gets its own gradient ids, or two logos on one screen would share (and break) them.
+    const p = 'ba' + (++brandGrad) + '_';
+    return BRAND_ART[id].replace(/id="([^"]+)"/g, \`id="\${p}$1"\`).replace(/url\\(#([^)]+)\\)/g, \`url(#\${p}$1)\`).replace(/(xlink:)?href="#([^"]+)"/g, \`$1href="#\${p}$2"\`)
+      .replace('<svg', \`<svg width="\${size}" height="\${size}" aria-hidden="true"\`);
+  }
   if (!BRANDS[id]) return '';
   // A list of colours means a gradient (top-left to bottom-right), like Gemini's sparkle.
   if (Array.isArray(fill)) {
