@@ -76,7 +76,7 @@ async function toDataUrl(url) {
 
 async function find(song) {
   const { t, a } = clean(song && song.title, song && song.artist);
-  if (!t) return null;
+  if (!t || !a) return null; // without an artist a title alone matches the wrong song too easily
   const key = `${t}|${a}`.toLowerCase();
   if (cache.has(key)) return cache.get(key);
   let found = null;

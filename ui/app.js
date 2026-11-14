@@ -1028,6 +1028,9 @@ let peekTimer = null;
 state.found = null; // { key, from: what the app sent, url }
 function findCover(m) {
   if (!host || prefs.findCovers === false || !m || !m.title || m.readOnly) return;
+  // Only look up songs: a bare title with no artist ("Netflix" in Chrome) would match some other song's cover
+  // ("Netflix (Trap Remix)"). Streaming services get their own logo instead.
+  if (!String(m.artist || '').trim() || brandOf(m.title)) return;
   const key = mediaKey(m);
   if (state.found && state.found.key === key) return;
   state.found = { key, from: m.art || null, url: null };
