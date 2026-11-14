@@ -187,3 +187,28 @@ button.src:hover{background:rgba(255,255,255,.16)}
 .srclist{display:flex;flex-direction:column;gap:4px}
 .srcrow{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:12px;border:0;background:transparent;text-align:left;cursor:pointer}
 .srcrow:hover,.srcrow.on{background:rgba(255,255,255,.08)}
+/* calendar */
+.cweek{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
+.cday{border:0;border-radius:16px;background:rgba(255,255,255,.05);height:64px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;cursor:pointer;transition:background .15s,transform .15s}
+.cday:hover{background:rgba(255,255,255,.1)}
+.cday:active{transform:scale(.96)}
+.cday .w{font-size:11px;font-weight:600;color:rgba(255,255,255,.5);text-transform:uppercase;letter-spacing:.04em}
+.cday .n{font-size:19px;font-weight:600;font-variant-numeric:tabular-nums;line-height:1.1}
+.cday .dots{display:flex;gap:3px;height:4px}
+.cday .dots i{width:4px;height:4px;border-radius:2px;background:#ff5f57}
+.cday.on{background:#fff;color:#000}
+.cday.on .w{color:rgba(0,0,0,.55)}
+.clist{display:flex;flex-direction:column;gap:6px;max-height:280px;overflow:auto;margin:0 -4px;padding:0 4px}
+.cev{display:flex;align-items:center;gap:12px;padding:10px 12px 10px 14px;border-radius:16px;background:rgba(255,255,255,.05);position:relative;overflow:hidden}
+.cev::before{content:"";position:absolute;left:0;top:10px;bottom:10px;width:4px;border-radius:0 3px 3px 0;background:var(--c)}
+.cev.live{background:color-mix(in srgb,var(--c) 16%,rgba(255,255,255,.04))}
+.cev.past{opacity:.45}
+.cev .ct{display:flex;flex-direction:column;width:46px;font-size:13px;font-weight:600;font-variant-numeric:tabular-nums;line-height:1.35}
+.cev .ct .d{font-weight:400;font-size:12px}
+.cev svg{vertical-align:-2px}
+.nowtag{color:var(--c);font-weight:700}
+.callday{font-size:12px;font-weight:600;padding:5px 11px;border-radius:999px;background:color-mix(in srgb,var(--c) 22%,transparent);color:color-mix(in srgb,var(--c) 60%,#fff)}
+.btn.join{background:#30d158;color:#002b0e}
+.btn.join:hover{filter:brightness(1.08)}
+.x.spin svg{animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}

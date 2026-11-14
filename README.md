@@ -5,7 +5,7 @@
 # Dynamic Island for Windows
 
 **A free, Mac-style island at the top-centre of your screen.**<br>
-Music, timers, alarms, Claude Code approvals, system pop-ups and quick tools, right where you look.
+Music, calendar, timers, alarms, AI agent approvals, system pop-ups and quick tools, right where you look.
 
 [![Download](https://img.shields.io/badge/Download-Windows%20installer-0a6cff?style=for-the-badge&logo=windows11&logoColor=white)](https://github.com/Vraj93/dynamic-island-windows/releases/latest)
 
@@ -57,6 +57,29 @@ switching between apps. A timer gets its own small island next to the music. Rig
 </table>
 
 <img src="docs/images/agent.png" width="49%" alt="Claude Code working, shown in the compact island">
+
+## Calendar
+
+Sign in with **Google** or **Microsoft** (Outlook.com, Hotmail, Microsoft 365), or paste any **calendar link** (.ics / webcal).
+Your week shows in the sheet, and a heads-up drops down a few minutes before each event, with a **Join** button for
+Meet, Teams and Zoom. Reminders can sync both ways with **Google Tasks** or **Microsoft To Do**, so they reach your phone.
+Sign-in happens in your own browser; tokens are encrypted with Windows' data protection and stay on your PC.
+
+<details>
+<summary><b>Calendar sign-in: app IDs (for whoever builds the installer)</b></summary>
+<br>
+
+Google and Microsoft only let registered apps sign in. Put the IDs in  before building, or
+enter your own in Settings › Calendar › Advanced. Calendar links work without any of this.
+
+- **Google:** Google Cloud Console › new project › enable *Google Calendar API* and *Google Tasks API* › OAuth consent
+  screen (External; scopes calendar.readonly and tasks) › Credentials › *OAuth client ID* › type **Desktop app**. Copy the
+  client ID and secret. Until the consent screen is verified by Google, add testers' emails under *Test users*.
+- **Microsoft:** Azure portal › App registrations › New › *Accounts in any organizational directory and personal Microsoft
+  accounts* › Authentication › add platform **Mobile and desktop applications** with redirect URI  ›
+  API permissions: Calendars.Read, Tasks.ReadWrite, User.Read, offline_access. Copy the Application (client) ID.
+
+</details>
 
 ## Timers, alarms and focus
 
@@ -211,7 +234,7 @@ from `scripts/make-icons.ps1`.
   (answer in Gemini); Cursor reports steps as they finish; Codex reports when a turn is done.
 - HEIC pictures need the free "HEIF Image Extensions" from the Microsoft Store; WEBP and HEIC can't be written.
 - Brightness only works for a laptop's built-in screen.
-- Not built yet: Windows notifications in the island, calendar, Bluetooth / Wi-Fi pop-ups.
+- Not built yet: Windows notifications in the island, Bluetooth / Wi-Fi pop-ups.
 
 ## License
 

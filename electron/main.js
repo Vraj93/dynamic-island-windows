@@ -14,7 +14,8 @@ if (process.argv.includes('--agent-hook')) {
   return;
 }
 
-const { app, BrowserWindow, Tray, Menu, ipcMain, screen, nativeImage, session, desktopCapturer, clipboard, shell, dialog } = require('electron');
+const { app, BrowserWindow, Tray, Menu, ipcMain, screen, nativeImage, session, desktopCapturer, clipboard, shell, dialog, powerMonitor } = require('electron');
+const calendar = require('./calendar.js');
 const path = require('path');
 const fs = require('fs');
 const { spawn } = require('child_process');
@@ -97,6 +98,7 @@ ipcMain.on('ui', (_e, msg) => {
       log('ui ready');
       if (lastMedia) send(lastMedia);
       if (lastFullscreen) send(lastFullscreen);
+      send(calendar.snapshot());
       // Development only: ISLAND_TEST_SCRIPT=<file.js> runs that script in the UI (used to test drag-and-drop screens).
       if (process.env.ISLAND_TEST_SCRIPT && fs.existsSync(process.env.ISLAND_TEST_SCRIPT)) {
         win.webContents.executeJavaScript(fs.readFileSync(process.env.ISLAND_TEST_SCRIPT, 'utf8')).catch((e) => log('test script: ' + e.message));
@@ -123,7 +125,7 @@ ipcMain.on('ui', (_e, msg) => {
       applySettings(settings);
       break;
     case 'set-setting': setSetting(msg.key, msg.value); break;
-    case 'open-settings': openSettings(); break;
+    case 'open-settings': openSettings(msg.section); break;
     case 'open-data-folder': shell.openPath(app.getPath('userData')); break;
     case 'open-repo': shell.openExternal('https://github.com/Vraj93/dynamic-island-windows'); break;
     case 'open-path': if (typeof msg.path === 'string' && fs.existsSync(msg.path)) shell.showItemInFolder(msg.path); break;
@@ -305,12 +307,14 @@ const DEFAULT_SETTINGS = {
   chimes: true,           // sounds for timers, alarms, reminders, agents
   hideFullscreen: true,   // step aside for full-screen video and games (alerts still show)
   startWithWindows: false,
+  calAlert: 5,            // minutes before an event the island tells you (0 = off)
+  reminderSync: '',       // account id whose Google Tasks / Microsoft To Do your reminders sync with ('' = this PC only)
   // which tools appear in the utility sheet, in the order you put them
   // (the stopwatch lives inside Timer; it can also be shown as its own button)
-  tiles: ['timer', 'alarm', 'focus', 'reminder', 'note', 'clipboard', 'shelf', 'convert'],
-  tilesVersion: 2,
+  tiles: ['calendar', 'timer', 'alarm', 'focus', 'reminder', 'note', 'clipboard', 'shelf', 'convert'],
+  tilesVersion: 3,
 };
-const ALL_TILES = ['timer', 'alarm', 'stopwatch', 'focus', 'reminder', 'note', 'clipboard', 'shelf', 'convert'];
+const ALL_TILES = ['calendar', 'timer', 'alarm', 'stopwatch', 'focus', 'reminder', 'note', 'clipboard', 'shelf', 'convert'];
 const settingsFile = () => path.join(app.getPath('userData'), 'settings.json');
 let settings = { ...DEFAULT_SETTINGS };
 let settingsFromDisk = false;
@@ -323,12 +327,19 @@ function loadSettings() {
     settings.tilesVersion = 2;
     if (settingsFromDisk) saveSettings();
   }
+  // Once: Calendar is new; put it first.
+  if (settings.tilesVersion < 3) {
+    if (!settings.tiles.includes('calendar')) settings.tiles = ['calendar', ...settings.tiles];
+    settings.tilesVersion = 3;
+    if (settingsFromDisk) saveSettings();
+  }
 }
 function saveSettings() {
   try { fs.writeFileSync(settingsFile(), JSON.stringify(settings, null, 2)); settingsFromDisk = true; } catch (e) { log('settings save: ' + e.message); }
 }
 function setSetting(key, value) {
   if (!(key in DEFAULT_SETTINGS) || typeof value !== typeof DEFAULT_SETTINGS[key]) return;
+  if (key === 'calAlert') value = [0, 1, 2, 5, 10, 15, 30].includes(value) ? value : 5;
   if (key === 'hoverDelay') value = Math.max(0, Math.min(1500, Math.round(value / 50) * 50));
   if (key === 'tiles') {
     if (!Array.isArray(value)) return;
@@ -361,8 +372,9 @@ function applySettings(s) {
 
 /* ---------- the Settings window (centred, like a normal app window) ---------- */
 let settingsWin = null;
-function openSettings() {
-  if (settingsWin && !settingsWin.isDestroyed()) { settingsWin.show(); settingsWin.focus(); return; }
+function openSettings(section) {
+  const sec = /^[a-z]+$/.test(section || '') ? section : '';
+  if (settingsWin && !settingsWin.isDestroyed()) { if (sec) settingsWin.webContents.send('host', { type: 'section', section: sec }); settingsWin.show(); settingsWin.focus(); return; }
   settingsWin = new BrowserWindow({
     width: 980, height: 660, minWidth: 760, minHeight: 520,
     center: true, show: false,
@@ -374,7 +386,7 @@ function openSettings() {
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true },
   });
   settingsWin.removeMenu();
-  settingsWin.loadFile(path.join(__dirname, '..', 'ui', 'settings.html'));
+  settingsWin.loadFile(path.join(__dirname, '..', 'ui', 'settings.html'), sec ? { hash: 'sec=' + sec } : undefined);
   settingsWin.once('ready-to-show', () => settingsWin.show());
   settingsWin.on('closed', () => { settingsWin = null; });
 }
@@ -506,6 +518,9 @@ ipcMain.handle('claude-hooks', (_e, cmd) => {
   try { if (cmd === 'connect' || cmd === 'disconnect') a[cmd](); return a.connected() ? 'connected' : 'not connected'; } catch (e) { return e.message; }
 });
 
+/* Calendar accounts, events and synced reminders (electron/calendar.js). */
+ipcMain.handle('cal', (_e, req) => calendar.handle(req));
+
 function createTray() {
   // tray.ico holds a separately drawn image for each size Windows uses (made by scripts/make-icons.ps1).
   tray = new Tray(nativeImage.createFromPath(path.join(__dirname, '..', 'assets', 'tray.ico')));
@@ -539,6 +554,12 @@ if (!app.requestSingleInstanceLock()) {
     startMedia();
     applySettings(settings);
     startAgentServer();
+    calendar.start({ log, getSettings: () => settings, onChange: (snap) => {
+      send(snap);
+      if (settingsWin && !settingsWin.isDestroyed()) settingsWin.webContents.send('host', snap);
+    } });
+    powerMonitor.on('resume', () => calendar.nudge());
+    powerMonitor.on('unlock-screen', () => calendar.nudge());
     setInterval(poll, 16);
     setInterval(pollClipboard, 800);
     // Re-pin to the top-centre if screens or scaling change.

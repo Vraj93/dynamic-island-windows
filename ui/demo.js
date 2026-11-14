@@ -31,8 +31,29 @@
   });
   const timer = (leftSec) => { state.timer = { total: 600, endAt: now + leftSec * 1000, pausedLeft: null, done: false }; };
 
+  const calendar = () => {
+    const at = (dayOff, h, m) => { const d = new Date(); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() + dayOff); d.setHours(h, m); return d.getTime(); };
+    const n = new Date(), h = n.getHours(), m = n.getMinutes();
+    C.accounts = [{ id: 'g', provider: 'google', email: 'you@gmail.com', calendars: [] }];
+    const ev = (id, title, s, e, color, extra = {}) => ({ id, account: 'g', calendar: extra.cal || 'Work', color, title, start: s, end: e, allDay: false, location: '', join: '', ...extra });
+    C.events = [
+      { ...ev('h', 'Thanksgiving week', at(0, 0, 0), at(1, 0, 0), '#30d158', { cal: 'Holidays' }), allDay: true },
+      ev('a', 'Design review', at(0, h - 2, 0), at(0, h - 1, 0), '#4f9dff', { location: 'Room 4B' }),
+      ev('b', 'Team standup', at(0, h, m - 10), at(0, h, m + 20), '#4f9dff', { join: 'https://meet.google.com/abc-defg-hij' }),
+      ev('c', 'Lunch with Sam', at(0, h + 1, 30), at(0, h + 2, 30), '#ff9f0a', { cal: 'Personal', location: 'Blue Door Café' }),
+      ev('d', '1:1 with Priya', at(0, h + 3, 0), at(0, h + 3, 30), '#bf8cff', { join: 'https://teams.microsoft.com/l/meetup-join/x', cal: 'Outlook' }),
+      ev('e', 'Gym', at(1, 7, 0), at(1, 8, 0), '#ff6fae', { cal: 'Personal' }),
+      ev('f', 'Sprint planning', at(2, 10, 0), at(2, 11, 30), '#4f9dff', { join: 'https://zoom.us/j/123' }),
+      ev('g', 'Dentist', at(3, 16, 0), at(3, 16, 45), '#ff9f0a', { cal: 'Personal' }),
+    ];
+    C.syncedAt = now;
+  };
+
   const scenes = {
-    sheet() { music(); render('sheet'); },
+    sheet() { music(); calendar(); render('sheet'); },
+    calendar() { calendar(); render('calendar'); },
+    calempty() { render('calendar'); },
+    event() { calendar(); C.alert = { ev: C.events.find((e) => e.id === 'd'), phase: 'soon' }; C.alert.ev.start = now + 4.2 * 6e4; render('eventSoon'); },
     netflix() {
       music();
       Object.assign(state.media, { source: 'Chrome', title: 'Netflix', artist: '', album: '', art: null, duration: 0 });

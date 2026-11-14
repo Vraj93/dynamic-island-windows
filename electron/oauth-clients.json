@@ -1,0 +1,5 @@
+{
+  "_about": "App IDs for \"Sign in with Google / Microsoft\" in Settings > Calendar. See README > Calendar sign-in for how to make them. Anyone can also enter their own in Settings > Calendar > Advanced.",
+  "google": { "clientId": "", "clientSecret": "" },
+  "microsoft": { "clientId": "" }
+}
