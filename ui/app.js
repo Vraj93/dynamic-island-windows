@@ -782,18 +782,29 @@ function snapSize(w, h, r) {
 }
 
 /* The small second island: a running timer next to the music. */
-function bubbleWanted() {
-  return !!(state.timer && !state.timer.done && ['mediaCompact', 'mediaPeek', 'agentCompact', 'agentAlert'].includes(state.view));
+/* Two things at once: the main island shows one activity, a small bubble beside it shows the other.
+ * Music gets the bubble while an agent, a call, Focus or the stopwatch holds the island; a timer gets it otherwise. */
+const SIDE_HOSTS = ['agentCompact', 'agentAlert', 'callCompact', 'focusCompact', 'swCompact', 'timerCompact'];
+function bubbleKind() {
+  if (SIDE_HOSTS.includes(state.view) && mediaVisible() && state.media && state.media.active) return 'media';
+  if (state.timer && !state.timer.done && ['mediaCompact', 'mediaPeek', 'agentCompact', 'agentAlert', 'callCompact'].includes(state.view)) return 'timer';
+  return '';
 }
+function bubbleWanted() { return !!bubbleKind(); }
 function updateBubble() {
-  const want = bubbleWanted();
-  if (want) {
+  const kind = bubbleKind(), want = !!kind;
+  if (kind === 'timer') {
     const t = state.timer, left = timeLeft();
     bubble.innerHTML = `${ring(18, 3, left / t.total, '255,159,10')}<span class="f13 tn" style="font-weight:600;color:#ff9f0a" data-bind="left">${fmt(left)}</span>`;
+  } else if (kind === 'media') {
+    const html = `<div class="art" style="width:24px;height:24px;border-radius:7px;${artStyle()}${mediaPlaying() ? '' : ';opacity:.45;filter:grayscale(.5)'}">${artInner()}</div>${mediaPlaying() ? eq() : `<span style="color:rgba(255,255,255,.6);display:flex">${I.pause(13)}</span>`}`;
+    if (bubble.dataset.html !== html) { bubble.innerHTML = html; bubble.dataset.html = html; } // don't restart the bars
   }
+  if (kind !== 'media') bubble.dataset.html = '';
+  bubble.dataset.kind = kind;
   bubble.classList.toggle('gone', !want);
   positionBubble();
-  trackRects(500);
+  trackRects(1100);
 }
 function positionBubble() {
   const r = island.getBoundingClientRect();
@@ -1008,6 +1019,7 @@ function onMedia(m) {
     (x.art || '').length, (x.sessions || []).map((s) => s.id + s.status).join(), x.duration > 0]) : '');
   const sameLook = shown(m) === shown(prev);
   state.media = m;
+  if (!sameLook) updateBubble(); // the music in the side bubble (new song, paused...)
   // Only the play position moved: the 250 ms tick already draws that, so don't re-render.
   if (sameLook) return;
 
@@ -1287,7 +1299,7 @@ content.addEventListener('click', (e) => {
   else if (state.view === 'agentAlert') render('approvalExpanded');
   else if (state.view === 'mediaCompact' || state.view === 'mediaPeek') { clearTimeout(peekTimer); render('mediaExpanded'); }
 });
-bubble.addEventListener('click', () => render('timerExpanded'));
+bubble.addEventListener('click', () => render(bubble.dataset.kind === 'media' ? 'mediaExpanded' : 'timerExpanded'));
 
 /* Right-click a resting island to hide it. */
 island.addEventListener('contextmenu', (e) => {
@@ -1422,3 +1434,6 @@ post({ type: 'ready' });
 
 /* Opened in a normal browser (no Electron)? Show the sheet so the UI can be checked. */
 // Opened in a normal browser (no Electron)? ui/demo.js shows a sample screen.
+
+// The side bubble sits beside the island: place it again whenever the island finishes changing size.
+island.addEventListener('transitionend', (e) => { if (e.target === island && /width|height/.test(e.propertyName)) { positionBubble(); sendRects(); } });
