@@ -13,6 +13,7 @@ function brandOf(...texts) {
 // The brand's logo as an SVG, in white (or a colour) on transparent.
 // Where a brand's real icon isn't a flat colour, match the real one: tile colour and logo colour (or gradient).
 const BRAND_STYLE = {
+  netflix: { bg: '#141414', fg: '#e50914' },                                                   // red N on Netflix black
   openai: { bg: '#ffffff', fg: '#000000' },                                                    // black knot on white
   gemini: { bg: '#1e1f24', fg: ['#1ba1e3', '#5489d6', '#9b72cb', '#d96570', '#f49c46'] },        // Gemini's gradient sparkle
   claude: { bg: '#d97757', fg: '#ffffff' },
