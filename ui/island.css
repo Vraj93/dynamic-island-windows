@@ -334,3 +334,8 @@ button.src:hover{background:rgba(255,255,255,.16)}
 @keyframes eq4{0%,100%{transform:scaleY(.1)}40%{transform:scaleY(.3)}70%{transform:scaleY(.18)}}
 .eq.off i{animation:none;transform:scaleY(.15);opacity:.5}
 .brandart{display:flex;align-items:center;justify-content:center;width:100%;height:100%}
+/* Motion runs on one shared 20-frames-a-second timer (app.js) instead of 60 fps CSS animations:
+   the island looks the same at this size and the graphics work drops by two thirds. */
+.spin{animation:none}
+.eq i{animation:none}
+body.liveviz .eq:not(.off) i{transition:none}

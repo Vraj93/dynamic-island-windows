@@ -697,6 +697,7 @@ function render(name, { animate } = {}) {
       if (state.view !== 'none') return;
       snapSize(LIP.w, LIP.h, LIP.r);
       sendRects();
+      islandSize = { w: LIP.w, h: LIP.h }; requestWin();
     }, 260);
     updateBubble();
     return;
@@ -709,6 +710,7 @@ function render(name, { animate } = {}) {
   // Round up, so text is never cut by a fraction of a pixel ("Claude Co…").
   const box = root.getBoundingClientRect(), w = Math.ceil(box.width), h = Math.ceil(box.height);
   measurer.innerHTML = ''; // measured: empty it, so its hidden copy of the animations stops running
+  islandSize = { w, h }; requestWin();
 
   if (island.classList.contains('gone')) {
     // Coming back from hidden: start from the small lip, never from the last panel size.
@@ -805,6 +807,22 @@ function bubbleKind() {
   return '';
 }
 function bubbleWanted() { return !!bubbleKind(); }
+/* Ask the main process for a window just big enough for the island (and a side island), with room for
+ * shoulders and shadow. Grow at once; shrink only after the closing animation, so nothing is ever cut off. */
+let islandSize = { w: LIP.w, h: LIP.h }, sentWin = { w: 0, h: 0 }, shrinkTimer = null;
+function requestWin() {
+  const SHADOW = 64;
+  let half = islandSize.w / 2 + 16 + SHADOW;
+  if (bubbleWanted()) half = Math.max(half, islandSize.w / 2 + 42 + (bubble.offsetWidth || 220) + 16 + 24);
+  const need = { w: Math.ceil(half * 2), h: Math.ceil(Math.max(islandSize.h, 38) + SHADOW + 24) };
+  const grow = { w: Math.max(need.w, sentWin.w), h: Math.max(need.h, sentWin.h) };
+  if (grow.w !== sentWin.w || grow.h !== sentWin.h) { sentWin = grow; post({ type: 'win-size', w: grow.w, h: grow.h }); }
+  clearTimeout(shrinkTimer);
+  if (need.w < sentWin.w || need.h < sentWin.h) {
+    shrinkTimer = setTimeout(() => { sentWin = need; post({ type: 'win-size', w: need.w, h: need.h }); }, 900);
+  }
+}
+
 function updateBubble() {
   const kind = bubbleKind(), want = !!kind;
   if (kind === 'timer') {
@@ -828,6 +846,7 @@ function updateBubble() {
   if (kind !== 'media') bubble.dataset.html = '';
   bubble.dataset.kind = kind;
   bubble.classList.toggle('gone', !want);
+  requestWin(); // room for the side island, or give it back
   positionBubble();
   trackRects(1100);
 }
@@ -945,7 +964,7 @@ function stopViz() {
 
 function vizLoop(t = 0) {
   viz.raf = requestAnimationFrame(vizLoop);
-  if (t - viz.last < 66) return; // 15 updates a second; CSS eases between them, so it still looks smooth
+  if (t - viz.last < 50) return; // 20 updates a second (see the shared motion timer below)
   viz.last = t;
   viz.analyser.getByteFrequencyData(viz.data);
   // Loudness of each band, with treble lifted a little (music has far less energy up there).
@@ -1495,3 +1514,25 @@ post({ type: 'ready' });
 
 // The side bubble sits beside the island: place it again whenever the island finishes changing size.
 island.addEventListener('transitionend', (e) => { if (e.target === island && /width|height/.test(e.propertyName)) { positionBubble(); sendRects(); } });
+
+/* ---------------- shared motion timer ----------------
+ * Spinners and the sound bars (when they aren't following live audio) move 20 times a second from this one
+ * timer. CSS animations would redraw the island 60 times a second, which costs real CPU/GPU in the background. */
+(function motion() {
+  let angle = 0, t = 0;
+  // Each bar gets its own mix of rhythms, so they never line up.
+  const RATES = [[3.1, 7.3], [4.7, 2.9], [2.3, 5.9], [6.1, 3.7], [3.9, 8.3], [5.3, 2.1], [2.7, 6.7]];
+  setInterval(() => {
+    if (document.hidden) return;
+    t += 0.05; angle = (angle + 20) % 360;
+    document.querySelectorAll('#content .spin, #bubble .spin').forEach((el) => { el.style.transform = `rotate(${angle}deg)`; });
+    if (document.body.classList.contains('liveviz')) return; // live audio drives the bars itself
+    document.querySelectorAll('#content .eq:not(.off), #bubble .eq:not(.off)').forEach((eq) => {
+      eq.querySelectorAll('i').forEach((el, j) => {
+        const [a, b] = RATES[j % 7];
+        const v = Math.abs(Math.sin(t * a + j) * 0.6 + Math.sin(t * b + j * 2) * 0.4);
+        el.style.transform = `scaleY(${(0.12 + 0.88 * Math.min(1, v)).toFixed(2)})`;
+      });
+    });
+  }, 50);
+})();
