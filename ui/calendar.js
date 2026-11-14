@@ -12,7 +12,6 @@ I.pin = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="cur
 
 const C = {
   events: [], tasks: [], accounts: [], taskAccounts: [], syncedAt: 0, syncing: false,
-  day: 0,                                   // which day the Calendar panel shows (0 = today)
   alert: null,                              // { ev, phase: 'soon' | 'now' }
   alerted: new Set(store.get('calAlerted', [])),
   doneTasks: new Set(store.get('calDoneTasks', [])), // synced reminders finished here (don't bring them back)
@@ -52,42 +51,96 @@ Object.defineProperty(calTile, 'sub', {
 });
 TILE_VIEW.calendar = 'calendar';
 
-/* ---------------- the Calendar panel ---------------- */
-views.calendar = () => {
-  const now = Date.now();
-  const strip = Array.from({ length: 7 }, (_, i) => {
-    const d = new Date(dayStart(i)), n = eventsOn(i).length;
-    return `<button class="cday${C.day === i ? ' on' : ''}" data-act="calDay" data-arg="${i}" aria-label="${d.toLocaleDateString([], { weekday: 'long', day: 'numeric', month: 'long' })}">
-      <span class="w">${i === 0 ? 'Today' : DAYS[d.getDay()]}</span><span class="n">${d.getDate()}</span><span class="dots">${'<i></i>'.repeat(Math.min(3, n))}</span></button>`;
-  }).join('');
-  const list = eventsOn(C.day);
-  const allDay = list.filter((e) => e.allDay);
-  const timed = list.filter((e) => !e.allDay);
+/* ---------------- the Calendar panel: a month you can move through, and the chosen day's events ---------------- */
+const dayOf = (t) => { const d = new Date(t); d.setHours(0, 0, 0, 0); return d.getTime(); };
+const addDays = (t, n) => { const d = new Date(t); d.setDate(d.getDate() + n); return d.getTime(); };
+const monthOf = (t) => { const d = new Date(t); return new Date(d.getFullYear(), d.getMonth(), 1).getTime(); };
+const eventsIn = (day) => { const b = addDays(day, 1); return allEvents().filter((e) => e.start < b && (e.end > day || (e.end === e.start && e.start >= day))); };
+C.sel = dayOf(Date.now());
+C.month = monthOf(Date.now());
+
+function monthGrid() {
+  const first = new Date(C.month), today = dayOf(Date.now());
+  const lead = (first.getDay() + 6) % 7;                 // weeks start on Monday
+  let t = addDays(C.month, -lead);
+  // Which days have events (one pass over everything).
+  const marks = new Map();
+  const gridEnd = addDays(t, 42);
+  for (const e of allEvents()) {
+    if (e.end < t || e.start >= gridEnd) continue;
+    for (let d = Math.max(dayOf(e.start), t); d < Math.min(e.end > e.start ? e.end : e.start + 1, gridEnd); d = addDays(d, 1)) {
+      const l = marks.get(d) || []; if (l.length < 3) l.push(e.color); marks.set(d, l);
+    }
+  }
+  const head = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'].map((w) => `<span class="cw">${w}</span>`).join('');
+  let cells = '';
+  for (let i = 0; i < 42; i++, t = addDays(t, 1)) {
+    const d = new Date(t), out = d.getMonth() !== first.getMonth();
+    const dots = (marks.get(t) || []).map((c) => `<i style="background:${esc(c)}"></i>`).join('');
+    cells += `<button class="cm${out ? ' out' : ''}${t === today ? ' today' : ''}${t === C.sel ? ' on' : ''}${t < today ? ' was' : ''}" data-act="calPick" data-arg="${t}">
+      <span>${d.getDate()}</span><span class="dots">${dots}</span></button>`;
+  }
+  return `<div class="cgrid">${head}${cells}</div>`;
+}
+
+function dayList(day) {
+  const now = Date.now(), list = eventsIn(day);
+  const allDay = list.filter((e) => e.allDay), timed = list.filter((e) => !e.allDay);
   const rows = timed.map((e) => {
-    const live = e.start <= now && e.end > now, past = e.end <= now;
-    const soon = !past && e.start - now < 15 * 6e4;
+    const live = e.start <= now && e.end > now, past = e.end <= now, soon = !past && e.start - now < 15 * 6e4;
     const sub = [e.location && !/^https?:\/\//.test(e.location) ? `${I.pin} ${esc(e.location)}` : '', esc(e.calendar)].filter(Boolean).join('<span class="d"> · </span>');
+    const startTxt = e.start < day ? '…' : tm(e.start), endTxt = e.end > addDays(day, 1) ? '…' : tm(e.end);
     return `<div class="cev${e.local ? ' mine' : ''}${past ? ' past' : ''}${live ? ' live' : ''}" style="--c:${esc(e.color)}"${e.local ? ` data-act="calEdit" data-arg="${e.id}"` : ''}>
-      <div class="ct"><span>${tm(e.start)}</span><span class="d">${tm(e.end)}</span></div>
+      <div class="ct"><span>${startTxt}</span><span class="d">${endTxt}</span></div>
       <div class="sp"><div class="f14 ell" style="font-weight:600">${esc(e.title)}</div><div class="d f12 ell">${live ? '<b class="nowtag">Now</b> ' : ''}${sub}</div></div>
       ${e.join && !past ? `<button class="btn sm${live || soon ? ' join' : ''}" data-act="calOpen" data-arg="${esc(e.join)}">${I.video}${live || soon ? joinLabel(e.join) : ''}</button>` : ''}
     </div>`;
   }).join('');
-  const d = new Date(dayStart(C.day));
-  const label = C.day === 0 ? 'Today' : C.day === 1 ? 'Tomorrow' : d.toLocaleDateString([], { weekday: 'long' });
+  const chips = allDay.map((e) => `<span class="callday" style="--c:${esc(e.color)}"${e.local ? ` data-act="calEdit" data-arg="${e.id}"` : ''}>${esc(e.title)}</span>`).join('');
+  return { count: list.length, html: `${chips ? `<div class="row" style="gap:6px;flex-wrap:wrap">${chips}</div>` : ''}
+    ${rows || `<div class="cempty"><span class="m f13">${allDay.length ? 'No timed events' : day < dayOf(now) ? 'Nothing happened' : 'Nothing planned'}</span>
+      <button class="btn sm" data-act="calNew">${I.plus} Add event</button></div>`}` };
+}
+
+views.calendar = () => {
+  const m = new Date(C.month), sel = new Date(C.sel), today = dayOf(Date.now());
+  const rel = Math.round((C.sel - today) / 864e5);
+  const label = rel === 0 ? 'Today' : rel === 1 ? 'Tomorrow' : rel === -1 ? 'Yesterday' : sel.toLocaleDateString([], { weekday: 'long' });
+  const list = dayList(C.sel);
   const errs = C.accounts.filter((a) => a.error || a.needsSignIn);
-  return panel(`<div class="row">${backBtn()}<span class="f15 sp">${d.toLocaleDateString([], { month: 'long', year: 'numeric' })}</span>
+  const thisMonth = C.month === monthOf(Date.now()) && C.sel === today;
+  return panel(`<div class="row">${backBtn()}
+      <span class="f15" style="min-width:150px">${m.toLocaleDateString([], { month: 'long', year: 'numeric' })}</span>
+      <button class="x" data-act="calMonth" data-arg="-1" aria-label="Previous month">${I.back}</button>
+      <button class="x" data-act="calMonth" data-arg="1" aria-label="Next month" style="transform:scaleX(-1)">${I.back}</button>
+      ${thisMonth ? '' : '<button class="chip" data-act="calToday" style="height:30px">Today</button>'}
+      <span class="sp"></span>
       <button class="btn sm" data-act="calNew" style="padding:0 14px 0 10px;gap:4px">${I.plus} Add</button>
       ${hasAccounts() ? `<button class="x${C.syncing ? ' spin' : ''}" data-act="calSync" aria-label="Sync now" title="${C.syncedAt ? 'Synced ' + tm(C.syncedAt) : 'Sync'}">${I.sync}</button>` : ''}
       <button class="x" data-act="calSettings" aria-label="Calendar settings" title="Calendar settings">${I.gear}</button></div>
-    <div class="cweek">${strip}</div>
-    <div class="row" style="padding:0 4px"><span class="f13 sp" style="font-weight:600">${label}<span class="d" style="font-weight:400"> · ${d.toLocaleDateString([], { day: 'numeric', month: 'long' })}</span></span>
-      <span class="d f12">${list.length ? `${list.length} event${list.length === 1 ? '' : 's'}` : ''}</span></div>
-    ${allDay.length ? `<div class="row" style="gap:6px;flex-wrap:wrap">${allDay.map((e) => `<span class="callday" style="--c:${esc(e.color)}"${e.local ? ` data-act="calEdit" data-arg="${e.id}"` : ''}>${esc(e.title)}</span>`).join('')}</div>` : ''}
-    <div class="clist">${rows || `<div class="m f13" style="padding:18px 4px;text-align:center">${allDay.length ? 'No meetings' : 'Nothing planned'} ${C.day === 0 ? 'today' : label === 'Tomorrow' ? 'tomorrow' : 'on ' + label}.</div>`}</div>
-    ${!hasAccounts() && !C.local.length ? '<div class="d f12" style="padding:0 4px;text-align:center">Events you add stay on this PC. Want Google or Outlook events here too? Connect them in Settings (optional).</div>' : ''}
-    ${errs.length ? `<div class="f12" style="color:#ff9f0a;padding:0 4px">${esc(errs[0].email || errs[0].name || 'A calendar')}: ${esc(errs[0].needsSignIn ? 'sign in again in Settings.' : errs[0].error)}</div>` : ''}`, 560);
+    <div class="cbody">
+      ${monthGrid()}
+      <div class="cday-col">
+        <div class="row"><span class="sp"><span class="f15">${label}</span><span class="d f13"> · ${sel.toLocaleDateString([], { day: 'numeric', month: 'long', ...(sel.getFullYear() !== new Date().getFullYear() ? { year: 'numeric' } : {}) })}</span></span>
+          <span class="d f12">${list.count ? `${list.count} event${list.count === 1 ? '' : 's'}` : ''}</span></div>
+        <div class="clist">${list.html}</div>
+      </div>
+    </div>
+    ${!hasAccounts() && !C.local.length ? '<div class="d f12" style="padding:0 4px">Events you add stay on this PC. To see Google or Outlook events here too, connect them in Settings (optional).</div>' : ''}
+    ${errs.length ? `<div class="f12" style="color:#ff9f0a;padding:0 4px">${esc(errs[0].email || errs[0].name || 'A calendar')}: ${esc(errs[0].needsSignIn ? 'sign in again in Settings.' : errs[0].error)}</div>` : ''}`, 820);
 };
+Object.assign(actions, {
+  calPick(t) { C.sel = +t; if (monthOf(C.sel) !== C.month) C.month = monthOf(C.sel); render('calendar'); },
+  calMonth(d) {
+    const m = new Date(C.month); m.setMonth(m.getMonth() + +d); C.month = m.getTime();
+    // Keep the same day number in the new month where it exists.
+    const s = new Date(C.sel), last = new Date(m.getFullYear(), m.getMonth() + 1, 0).getDate();
+    C.sel = new Date(m.getFullYear(), m.getMonth(), Math.min(s.getDate(), last)).getTime();
+    render('calendar');
+  },
+  calToday() { C.sel = dayOf(Date.now()); C.month = monthOf(C.sel); render('calendar'); },
+});
+
 
 /* ---------------- heads-up before an event ---------------- */
 views.eventSoon = () => {
@@ -127,13 +180,12 @@ function checkEvents() {
 }
 
 Object.assign(actions, {
-  calDay(i) { C.day = +i; render('calendar'); },
   calSync() { if (!host) return; C.syncing = true; render('calendar'); host.invoke('cal', { op: 'sync' }).then(applyCal); },
   calSettings() { post({ type: 'open-settings', section: 'calendar' }); render(baseView()); },
   calOpen(url) { if (host) host.invoke('cal', { op: 'open', url }); },
   calJoin() { const e = C.alert && C.alert.ev; C.alert = null; if (e && host) host.invoke('cal', { op: 'open', url: e.join }); render(baseView()); },
   calDismiss() { C.alert = null; render(baseView()); },
-  calFromAlert() { C.alert = null; C.day = 0; render('calendar'); },
+  calFromAlert() { C.alert = null; actions.calToday(); },
 });
 
 /* ---------------- reminders <-> Google Tasks / Microsoft To Do ---------------- */
@@ -215,69 +267,103 @@ setInterval(checkEvents, 1000);
 // Keep "in 12 min" and the Now marker fresh while the panel is open.
 setInterval(() => { if (state.view === 'calendar' && !document.querySelector('#content :hover')) render('calendar'); }, 60e3);
 
+
 /* ---------------- adding and editing events on this PC (no account needed) ---------------- */
 const CAL_COLORS = ['#ff5f57', '#ff9f0a', '#ffd60a', '#30d158', '#4f9dff', '#bf8cff', '#ff6fae'];
-const DURS = [[15, '15 min'], [30, '30 min'], [45, '45 min'], [60, '1 h'], [90, '1.5 h'], [120, '2 h'], [0, 'All day']];
+const ymd = (t) => { const d = new Date(t); return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`; };
+const fromYmd = (s) => { const [y, m, d] = String(s).split('-').map(Number); return new Date(y, m - 1, d).getTime(); };
+const mins = (s) => { const [h, m] = String(s || '0:0').split(':').map(Number); return (h || 0) * 60 + (m || 0); };
+const hm = (n) => `${pad2(Math.floor(n / 60) % 24)}:${pad2(n % 60)}`;
+function lenText(n) { const h = Math.floor(n / 60), m = n % 60; return h ? `${h} h${m ? ` ${m} min` : ''}` : `${m} min`; }
+// What the editor holds: date "YYYY-MM-DD", start/end "HH:MM" (any minute), all day, colour, place.
+function readEdit() {
+  const e = C.edit; if (!e) return;
+  const v = (id) => { const el = document.querySelector('#content #' + id); return el ? el.value : null; };
+  e.title = v('calTitle') ?? e.title; e.where = v('calWhere') ?? e.where;
+  const d = v('calDate'); if (d) e.date = d;
+  const s = v('calStart'); if (s) e.start = s;
+  const en = v('calEnd'); if (en) e.end = en;
+}
+const endsNextDay = (e) => mins(e.end) <= mins(e.start);
 views.calEdit = () => {
-  const e = C.edit, start = e.day + e.h * 36e5 + e.m * 6e4;
-  const days = Array.from({ length: 14 }, (_, i) => {
-    const d = new Date(dayStart(i));
-    return `<button class="chip${e.day === dayStart(i) ? ' on' : ''}" data-act="calEDay" data-arg="${i}">${i === 0 ? 'Today' : i === 1 ? 'Tomorrow' : `${DAYS[d.getDay()]} ${d.getDate()}`}</button>`;
-  }).join('');
+  const e = C.edit;
+  const len = (mins(e.end) - mins(e.start) + 1440) % 1440 || 1440;
   return panel(`${head(e.id ? 'Edit event' : 'New event', '', 'calendar')}
     <input class="field" id="calTitle" placeholder="Event name" value="${esc(e.title)}" maxlength="80">
-    <div class="row cdays" style="gap:6px;overflow-x:auto">${days}</div>
-    ${e.dur ? `<div class="row" style="justify-content:center;gap:10px">
-      <div class="col" style="align-items:center;gap:6px"><button class="ib" data-act="calStep" data-arg="h:1" aria-label="Hour later">${I.plus}</button>
-        <span class="big" style="font-size:52px">${pad2(e.h)}</span><button class="ib" data-act="calStep" data-arg="h:-1" aria-label="Hour earlier">${I.minus}</button></div>
-      <span class="big" style="font-size:46px;margin-top:-8px">:</span>
-      <div class="col" style="align-items:center;gap:6px"><button class="ib" data-act="calStep" data-arg="m:5" aria-label="Five minutes later">${I.plus}</button>
-        <span class="big" style="font-size:52px">${pad2(e.m)}</span><button class="ib" data-act="calStep" data-arg="m:-5" aria-label="Five minutes earlier">${I.minus}</button></div>
-      <div class="col d f12" style="margin-left:18px;gap:4px"><span>Ends</span><b class="f15" style="color:#fff">${tm(start + e.dur * 6e4)}</b></div>
-    </div>` : ''}
-    <div class="row" style="gap:6px;flex-wrap:wrap">${DURS.map(([v, n]) => `<button class="chip${e.dur === v ? ' on' : ''}" data-act="calDur" data-arg="${v}">${n}</button>`).join('')}</div>
-    <div class="row" style="gap:10px;padding:0 4px">${CAL_COLORS.map((c) => `<button class="cdot${e.color === c ? ' on' : ''}" data-act="calColor" data-arg="${c}" style="background:${c}" aria-label="Colour"></button>`).join('')}</div>
+    <div class="cform">
+      <label>Date</label>
+      <div class="row" style="gap:8px">
+        <button class="x" data-act="calShift" data-arg="-1" aria-label="Day before">${I.back}</button>
+        <input class="field cin" type="date" id="calDate" value="${e.date}">
+        <button class="x" data-act="calShift" data-arg="1" aria-label="Day after" style="transform:scaleX(-1)">${I.back}</button>
+        <span class="sp"></span>
+        <span class="f13 m">All day</span>${toggle(e.allDay, 'calAllDay', '', 'All day')}
+      </div>
+      ${e.allDay ? '' : `<label>Time</label>
+      <div class="row" style="gap:10px">
+        <input class="field cin" type="time" id="calStart" value="${e.start}" aria-label="Starts">
+        <span class="d">to</span>
+        <input class="field cin" type="time" id="calEnd" value="${e.end}" aria-label="Ends">
+        <span class="d f13" data-bind="calLen">${lenText(len)}${endsNextDay(e) ? ' · ends next day' : ''}</span>
+      </div>
+      <label></label>
+      <div class="row" style="gap:6px;flex-wrap:wrap">${[15, 30, 45, 60, 90, 120, 180].map((n) => `<button class="chip sm${len === n ? ' on' : ''}" data-act="calLen" data-arg="${n}">${n < 60 ? n + ' min' : lenText(n)}</button>`).join('')}</div>`}
+      <label>Place</label>
+      <input class="field cin" id="calWhere" placeholder="Optional: a room, an address or a meeting link" value="${esc(e.where || '')}" maxlength="200" style="width:100%">
+      <label>Colour</label>
+      <div class="row" style="gap:10px">${CAL_COLORS.map((c) => `<button class="cdot${e.color === c ? ' on' : ''}" data-act="calColor" data-arg="${c}" style="background:${c}" aria-label="Colour"></button>`).join('')}</div>
+    </div>
     <div class="row" style="gap:10px">${e.id ? '<button class="btn f" data-act="calDelete" style="color:#ff8a84">Delete</button>' : ''}
-      <button class="btn f w" data-act="calSave">Save</button></div>`, 540);
+      <button class="btn f w" data-act="calSave">Save</button></div>`, 600);
 };
-const keepTitle = () => { if (C.edit) C.edit.title = readField('calTitle', C.edit.title); };
 Object.assign(actions, {
   calNew() {
-    const n = new Date(), next = Math.ceil((n.getHours() * 60 + n.getMinutes() + 1) / 30) * 30;
-    const mins = C.day === 0 ? Math.min(next, 23 * 60 + 30) : 9 * 60;
-    C.edit = { id: '', title: '', day: dayStart(C.day), h: Math.floor(mins / 60), m: mins % 60, dur: 60, color: CAL_COLORS[4] };
+    const n = new Date(), today = dayOf(Date.now());
+    const start = C.sel === today ? Math.min(Math.ceil((n.getHours() * 60 + n.getMinutes() + 1) / 15) * 15, 23 * 60) : 9 * 60;
+    C.edit = { id: '', title: '', date: ymd(C.sel), start: hm(start), end: hm(Math.min(start + 60, 23 * 60 + 59)), allDay: false, color: CAL_COLORS[4], where: '' };
     render('calEdit');
   },
   calEdit(id) {
     const e = C.local.find((x) => x.id === id); if (!e) return;
-    const s = new Date(e.start), day = new Date(s); day.setHours(0, 0, 0, 0);
-    C.edit = { id, title: e.title, day: day.getTime(), h: s.getHours(), m: s.getMinutes(), dur: e.allDay ? 0 : Math.round((e.end - e.start) / 6e4), color: e.color };
+    const s = new Date(e.start), en = new Date(e.end);
+    C.edit = { id, title: e.title, date: ymd(e.start), start: hm(s.getHours() * 60 + s.getMinutes()), end: hm(en.getHours() * 60 + en.getMinutes()), allDay: !!e.allDay,
+      allDays: e.allDay ? Math.max(1, Math.round((e.end - e.start) / 864e5)) : 1, color: e.color, where: e.location || '' };
     render('calEdit');
   },
-  calEDay(i) { keepTitle(); C.edit.day = dayStart(+i); render('calEdit'); },
-  calStep(arg) {
-    keepTitle(); const [k, d] = arg.split(':'); const e = C.edit;
-    if (k === 'h') e.h = (e.h + +d + 24) % 24; else e.m = (e.m + +d + 60) % 60;
-    render('calEdit');
-  },
-  calDur(v) { keepTitle(); C.edit.dur = +v; render('calEdit'); },
-  calColor(c) { keepTitle(); C.edit.color = c; render('calEdit'); },
+  calShift(d) { readEdit(); C.edit.date = ymd(addDays(fromYmd(C.edit.date), +d)); render('calEdit'); },
+  calAllDay() { readEdit(); C.edit.allDay = !C.edit.allDay; render('calEdit'); },
+  calLen(n) { readEdit(); C.edit.end = hm((mins(C.edit.start) + +n) % 1440); render('calEdit'); },
+  calColor(c) { readEdit(); C.edit.color = c; render('calEdit'); },
   calSave() {
-    keepTitle(); const e = C.edit;
+    readEdit(); const e = C.edit;
     if (!e.title.trim()) { const f = document.querySelector('#calTitle'); if (f) f.focus(); return; }
-    const allDay = e.dur === 0;
-    const start = allDay ? e.day : e.day + e.h * 36e5 + e.m * 6e4;
-    const end = allDay ? e.day + 864e5 : start + e.dur * 6e4;
-    const ev = { id: e.id || 'local-' + uid(), title: e.title.trim(), start, end, allDay, color: e.color };
+    const day = fromYmd(e.date);
+    if (!day) return;
+    let start, end;
+    if (e.allDay) { start = day; end = addDays(day, e.allDays || 1); }
+    else {
+      start = day + mins(e.start) * 6e4;
+      end = (endsNextDay(e) ? addDays(day, 1) : day) + mins(e.end) * 6e4;
+    }
+    const where = (e.where || '').trim();
+    const ev = { id: e.id || 'local-' + uid(), title: e.title.trim(), start, end, allDay: !!e.allDay, color: e.color,
+      location: /^https?:\/\//.test(where) ? '' : where, join: /^https?:\/\//.test(where) ? where : '' };
     C.local = [...C.local.filter((x) => x.id !== ev.id), ev];
     store.set('calEvents', C.local);
-    C.day = Math.max(0, Math.min(6, Math.round((e.day - dayStart(0)) / 864e5)));
+    C.sel = day; C.month = monthOf(day);
     C.edit = null; render('calendar');
   },
   calDelete() { C.local = C.local.filter((x) => x.id !== C.edit.id); store.set('calEvents', C.local); C.edit = null; render('calendar'); },
 });
-document.addEventListener('keydown', (ev) => { if (ev.key === 'Enter' && ev.target.id === 'calTitle') actions.calSave(); });
-// Events that ended over a month ago are tidied away.
-C.local = C.local.filter((e) => e.end > Date.now() - 30 * 864e5);
+// Live "1 h 25 min" while the times are changed; Enter saves.
+document.addEventListener('input', (ev) => {
+  if (!C.edit || !/^cal(Start|End)$/.test(ev.target.id)) return;
+  readEdit();
+  const el = document.querySelector('[data-bind="calLen"]');
+  const len = (mins(C.edit.end) - mins(C.edit.start) + 1440) % 1440 || 1440;
+  if (el) el.textContent = lenText(len) + (endsNextDay(C.edit) ? ' · ends next day' : '');
+  document.querySelectorAll('[data-act="calLen"]').forEach((b) => b.classList.toggle('on', +b.dataset.arg === len));
+});
+document.addEventListener('keydown', (ev) => { if (ev.key === 'Enter' && /^cal(Title|Where)$/.test(ev.target.id)) actions.calSave(); });
 CLOSABLE.add('calEdit');
 TYPING.add('calEdit');

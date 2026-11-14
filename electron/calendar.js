@@ -22,7 +22,7 @@ const crypto = require('crypto');
 const { app, net, shell, safeStorage } = require('electron');
 
 const SYNC_EVERY = 5 * 60e3;
-const PAST = 12 * 3600e3, AHEAD = 21 * 864e5;
+const PAST = 92 * 864e5, AHEAD = 366 * 864e5; // what synced accounts bring in: 3 months back, a year ahead
 
 let log = () => {};
 let onChange = () => {};
