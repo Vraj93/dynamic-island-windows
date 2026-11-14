@@ -988,7 +988,15 @@ function findCover(m) {
     if (state.media && mediaKey(state.media) === key) onMedia({ ...state.media, art: state.found.from }); // re-apply with the cover
   });
 }
+let mediaGoneTimer = null;
 function onMedia(m) {
+  // While the player is open, a moment of "nothing playing" (between songs) keeps showing the last song.
+  if (!m.active && state.view === 'mediaExpanded' && state.media && state.media.active) {
+    clearTimeout(mediaGoneTimer);
+    const last = state.media;
+    mediaGoneTimer = setTimeout(() => { if (state.media === last) { state.media = m; if (state.view === 'mediaExpanded') render(baseView()); } }, 3000);
+    return;
+  }
   if (state.found && state.found.url && state.found.key === mediaKey(m) && (m.art || null) === state.found.from) m = { ...m, art: state.found.url, foundArt: true };
   else if (m.active && !m.art) findCover(m);
   const prev = state.media;
@@ -1016,7 +1024,11 @@ function onMedia(m) {
     const want = baseView();
     if (want !== state.view || want === 'mediaCompact') render(want);
   } else if (state.view === 'mediaExpanded') {
-    if (!m.active) render(baseView()); else render('mediaExpanded');
+    // Skipping a song in a browser briefly reports "nothing playing": keep the player open, and close only if
+    // nothing has started again 3 seconds later.
+    clearTimeout(mediaGoneTimer);
+    if (!m.active) mediaGoneTimer = setTimeout(() => { if (state.view === 'mediaExpanded' && !(state.media && state.media.active)) render(baseView()); }, 3000);
+    else render('mediaExpanded');
   } else if (state.view === 'sheet') {
     render('sheet');
   }
