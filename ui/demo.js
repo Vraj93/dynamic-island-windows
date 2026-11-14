@@ -24,7 +24,7 @@
     document.documentElement.style.setProperty('--mc', state.mediaColor);
   };
   const agent = (status) => state.agents.set('demo', {
-    id: 'demo', project: 'DynamicIsland', title: 'Add media controls to the island', status,
+    id: 'demo', agent: 'claude-code', project: 'DynamicIsland', title: 'Add media controls to the island', status,
     step: 'Running Typecheck the project', startedAt: now - 68000, doneAt: status === 'done' ? now : 0, updated: now,
     feed: [{ tool: 'Read', text: 'Island.tsx' }, { tool: 'Edit', text: 'Media.tsx' }, { tool: 'Bash', text: 'npm run typecheck' }],
     stage: status === 'done' ? 3 : 1, stages: [0, 1], steps: 7,
@@ -53,6 +53,8 @@
 
   const scenes = {
     sheet() { music(); calendar(); render('sheet'); },
+    vlc() { music(); Object.assign(state.media, { source: 'VLC', title: 'The Terminal List S02E08', artist: '', album: '', art: null, duration: 0, readOnly: true }); render('mediaExpanded'); },
+    brands() { music(); Object.assign(state.media, { source: 'Chrome', title: 'Netflix', artist: '', album: '', art: null, duration: 0 }); agent('working'); state.agents.get('demo').agent = 'gemini'; render('sheet'); },
     sheetvol() { music(); render('sheet'); setTimeout(() => showHud({ kind: 'volume', value: 64, muted: false }), 300); },
     sheetagent() { music(); agent('working'); state.agents.get('demo').agent = 'claude-code'; render('sheet'); },
     calendar() { calendar(); render('calendar'); },

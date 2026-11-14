@@ -151,8 +151,16 @@ function mediaPos() {
 const SITE_COLORS = [[/netflix/i, '#e50914'], [/youtube/i, '#ff0033'], [/prime video|amazon/i, '#00a8e1'], [/disney/i, '#113ccf'],
   [/hotstar|jiocinema/i, '#1f80e0'], [/spotify/i, '#1ed760'], [/twitch/i, '#9146ff'], [/soundcloud/i, '#ff5500'], [/apple/i, '#fa2d48'], [/hulu/i, '#1ce783']];
 const artUsable = () => !!(state.media && state.media.art && state.mediaArtOk !== false);
+// The service or app playing, for its logo: the site's name in the title / artist / album first (Netflix in Chrome),
+// then the app itself (VLC, Spotify...). A browser on its own isn't a brand here: an unknown site gets a letter.
+function mediaBrand() {
+  const m = state.media || {};
+  const id = brandOf(m.title, m.artist, m.album) || brandOf(m.source);
+  return ['chrome', 'firefox', 'brave', 'opera', 'vivaldi'].includes(id) ? '' : id;
+}
 function tileColor() {
   const m = state.media || {}, text = `${m.title} ${m.artist} ${m.album}`;
+  const br = mediaBrand(); if (br) return brandTile(br).bg;
   for (const [re, c] of SITE_COLORS) if (re.test(text)) return c;
   let h = 0; for (const ch of String(m.title || 'x')) h = (h * 31 + ch.charCodeAt(0)) % 360;
   return `hsl(${h},55%,42%)`;
@@ -160,6 +168,8 @@ function tileColor() {
 const artStyle = () => (artUsable() ? `background-image:url('${state.media.art}')` : `background:${tileColor()}`);
 const artInner = () => {
   if (artUsable()) return '';
+  const br = mediaBrand();
+  if (br) return `<span class="brandart">${brandSvg(br, '58%', brandTile(br).fg)}</span>`;
   const letter = esc((String((state.media && state.media.title) || '').trim()[0] || '♪').toUpperCase());
   return `<svg viewBox="0 0 10 10" width="100%" height="100%" aria-hidden="true"><text x="5" y="7.1" text-anchor="middle" font-size="6.4" font-weight="700" fill="#fff" font-family="Segoe UI Variable Display,Segoe UI,sans-serif">${letter}</text></svg>`;
 };
@@ -322,7 +332,7 @@ const views = {
     const agentRows = liveAgents().sort((x, y) => y.updated - x.updated).slice(0, 2).map((a) => {
       const done = a.status === 'done', err = a.status === 'error', wait = a.status === 'waiting';
       return `<button class="strip astrip" data-act="focusAgent" data-arg="${esc(a.id)}" style="--ac:${agentRgb(a)}">
-        <span class="alogo" style="width:44px;height:44px;border-radius:12px">${esc(agentName(a)[0])}</span>
+        ${agentLogo(a, 44, 12)}
         <div class="sp" style="text-align:left"><div class="f14 ell" style="font-weight:600">${esc(agentName(a))}${a.project ? `<span class="d" style="font-weight:400"> · ${esc(a.project)}</span>` : ''}</div>
           <div class="d f12 ell">${esc(err ? 'Stopped with an error' : done ? 'Finished' : wait ? 'Needs you in its window' : a.step || 'Thinking')}</div></div>
         ${done ? check(18) : err ? '<span style="color:#ff6b6b;font-weight:700">!</span>' : spinner(18)}
@@ -522,7 +532,7 @@ const views = {
       html: `<div class="v texp aexp" style="--ac:${rgb}">
         <div class="atint"></div>
         <div class="row" style="gap:12px">
-          <span class="alogo">${esc(name[0])}</span>
+          ${agentLogo(a)}
           <div class="sp"><div class="f15 ell">${esc(a.project || name)}</div><div class="d f12 ell">${esc(name)}${a.title ? ' · ' + esc(a.title) : ''}</div></div>
           ${done ? (err ? '<span class="astate" style="color:#ff6b6b">Error</span>' : `<span class="astate" style="color:#30d158">${check(14)} Done</span>`) : `<span class="astate">${spinner(14)} Working</span>`}
           <button class="x" data-act="hideAgent" aria-label="Hide until its next task" title="Hide until its next task">${I.close}</button>
@@ -638,11 +648,11 @@ const views = {
                 <div class="seek" data-seek="1" ${m.canSeek ? '' : 'style="cursor:default"'}><div class="line"><b data-bind="mbar" style="width:${(pos / dur) * 100}%"></b></div></div>
                 <div class="times"><span data-bind="mpos">${fmtTrack(pos)}</span><span data-bind="mrem">−${fmtTrack(dur - pos)}</span></div>
               </div>` : ''}
-              <div class="row" style="justify-content:center;gap:18px">
+              ${m.readOnly ? `<div class="d f13" style="text-align:center;padding:14px 0">${esc(src.name)} doesn't share its controls with Windows; use its own window.</div>` : `<div class="row" style="justify-content:center;gap:18px">
                 <button class="ctl" data-act="media" data-arg="prev" aria-label="Previous" ${m.canPrev ? '' : 'disabled'}>${I.prev(28)}</button>
                 <button class="ctl pl" data-act="media" data-arg="toggle" aria-label="Play or pause">${mediaPlaying() ? I.pause(26) : I.play(26)}</button>
                 <button class="ctl" data-act="media" data-arg="next" aria-label="Next" ${m.canNext ? '' : 'disabled'}>${I.next(28)}</button>
-              </div>
+              </div>`}
             </div>
           </div>
         </div>
@@ -1143,6 +1153,13 @@ function trackStage(a, ev) {
   if (/^(Stop|TurnComplete|Notification)$/.test(name) && a.status === 'done') { a.stage = 3; a.stages = [0, 1, 2, 3]; if (a.diff) a.diff.live = false; }
 }
 const AGENT_COLORS = { 'claude-code': '217,119,87', codex: '16,163,127', gemini: '76,141,246', copilot: '163,113,247', cursor: '200,200,210' };
+const AGENT_BRAND = { 'claude-code': 'claude', codex: 'openai', gemini: 'gemini', copilot: 'copilot' };
+const agentBrand = (a) => AGENT_BRAND[a.agent] || (a.agent === 'custom' ? brandOf(a.agentName) : '');
+// The agent's logo tile: its brand logo when we have one, otherwise its first letter on its colour.
+function agentLogo(a, size = 38, radius = 11) {
+  const br = agentBrand(a), t = br && brandTile(br);
+  return `<span class="alogo" style="width:${size}px;height:${size}px;border-radius:${radius}px;${t ? `background:${t.bg}` : ''}">${t ? brandSvg(br, '60%', t.fg) : esc(agentName(a)[0])}</span>`;
+}
 const agentRgb = (a) => AGENT_COLORS[a.agent] || (a.color ? hexToRgb(a.color) : '76,156,255');
 function hexToRgb(h) { const m = String(h).match(/^#?([\da-f]{2})([\da-f]{2})([\da-f]{2})/i); return m ? [1, 2, 3].map((i) => parseInt(m[i], 16)).join(',') : '76,156,255'; }
 const LANG = { js: 'JS', mjs: 'JS', cjs: 'JS', ts: 'TS', tsx: 'TSX', jsx: 'JSX', py: 'PY', css: 'CSS', html: 'HTML', json: 'JSON', md: 'MD', ps1: 'PS', cs: 'C#', go: 'GO', rs: 'RS', java: 'JV', rb: 'RB', php: 'PHP', sh: 'SH', yml: 'YML', yaml: 'YML', toml: 'TOML', sql: 'SQL', c: 'C', cpp: 'C++', h: 'H', swift: 'SW', kt: 'KT' };
