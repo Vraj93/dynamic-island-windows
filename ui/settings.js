@@ -67,7 +67,7 @@ const SECTIONS = {
   general: () => `<h1>General</h1><p class="lead">How the island behaves day to day.</p>
     <div class="card">
       ${item('hideFullscreen', 'Step aside for full-screen apps', 'While a video, game or slideshow is full screen, only alerts show (approvals, alarms, timers, reminders).')}
-      ${item('chimes', 'Sounds', 'Chimes for timers, alarms, reminders, Focus and Claude Code.')}
+      ${item('chimes', 'Sounds', 'Chimes for timers, alarms, reminders, Focus and AI agents.')}
       ${item('clipboard', 'Clipboard history', 'Remembers the last 30 pieces of text you copy (pinned ones stay until you unpin them). Copies from password managers are never kept.')}
       ${item('clipKeep', 'Keep clipboard history after a restart', 'Saved encrypted for your Windows account, on this PC only. Off: forgotten when the island closes.', !S.clipboard)}
       ${info.store ? `<div class="item"><div class="t"><div class="n">Start with Windows</div><div class="s">On by default for the Store version. Turn it on or off in Windows Settings › Apps › Startup.</div></div></div>`
