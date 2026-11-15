@@ -33,6 +33,15 @@ jobs:
       - name: Build Store package
         run: npx electron-builder --win appx --x64 --publish never
 
+      - name: If it failed, show the manifest and the Windows SDK's detailed check
+        if: failure()
+        shell: pwsh
+        run: |
+          Get-Content dist/__appx-x64/AppxManifest.xml
+          $sdk = Get-ChildItem 'C:\Program Files (x86)\Windows Kits\10\bin\10.*\x64\makeappx.exe' | Sort-Object FullName | Select-Object -Last 1
+          "Using $($sdk.FullName)"
+          & $sdk.FullName pack /v /o /f dist/__appx-x64/mapping.txt /p dist/check.appx
+
       - name: Keep the package
         uses: actions/upload-artifact@v4
         with:
