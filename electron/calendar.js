@@ -97,10 +97,10 @@ const PROVIDERS = {
 };
 const b64url = (b) => b.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 
-const DONE_PAGE = (ok, msg) => `<!doctype html><meta charset="utf-8"><title>Dynamic Island</title>
+const DONE_PAGE = (ok, msg) => `<!doctype html><meta charset="utf-8"><title>Dynamic Isle</title>
 <body style="margin:0;height:100vh;display:grid;place-items:center;background:#0b0d16;color:#fff;font:15px 'Segoe UI Variable','Segoe UI',sans-serif">
 <div style="text-align:center"><div style="width:64px;height:64px;margin:0 auto 18px;border-radius:32px;display:grid;place-items:center;background:${ok ? 'rgba(48,209,88,.16);color:#30d158' : 'rgba(255,69,58,.16);color:#ff453a'};font-size:30px">${ok ? '✓' : '!'}</div>
-<div style="font-size:22px;font-weight:600;margin-bottom:8px">${ok ? 'Connected to Dynamic Island' : 'Sign-in didn\'t finish'}</div>
+<div style="font-size:22px;font-weight:600;margin-bottom:8px">${ok ? 'Connected to Dynamic Isle' : 'Sign-in didn\'t finish'}</div>
 <div style="opacity:.6">${msg}</div></div></body>`;
 
 let pendingLogin = null;
@@ -450,7 +450,7 @@ async function syncIcs(a, from, to) {
 }
 
 /* ---------------- reminders <-> Google Tasks / Microsoft To Do ---------------- */
-const MARK = 'Dynamic Island reminder';
+const MARK = 'Dynamic Island reminder'; // hidden text in synced tasks; kept so reminders synced before the rename still match
 async function defaultList(a) {
   if (a.taskList) return a.taskList;
   if (a.provider === 'google') { const r = await api(a, 'https://tasks.googleapis.com/tasks/v1/users/@me/lists?maxResults=20'); a.taskList = r.items && r.items[0] && r.items[0].id; }

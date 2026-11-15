@@ -1,8 +1,8 @@
 <div align="center">
 
-<img src="build/icon.png" width="96" alt="Dynamic Island icon">
+<img src="build/icon.png" width="96" alt="Dynamic Isle icon">
 
-# Dynamic Island for Windows
+# Dynamic Isle
 
 **A free, Mac-style island at the top-centre of your screen.**<br>
 Music, calendar, timers, alarms, AI agent approvals, system pop-ups and quick tools, right where you look.
@@ -75,9 +75,9 @@ The panel shows how long it's been working, the code change it's making right no
 Anything that can run a command can show itself in the island, with no setup:
 
 ```bash
-"Dynamic Island.exe" --island --name "Nightly build" --event start --text "Build and test"
-"Dynamic Island.exe" --island --name "Nightly build" --event step  --text "Compiling 214 files"
-"Dynamic Island.exe" --island --name "Nightly build" --event done  --text "All 512 tests passed"
+"Dynamic Isle.exe" --island --name "Nightly build" --event start --text "Build and test"
+"Dynamic Isle.exe" --island --name "Nightly build" --event step  --text "Compiling 214 files"
+"Dynamic Isle.exe" --island --name "Nightly build" --event done  --text "All 512 tests passed"
 ```
 
 `--event` is `start`, `step`, `needs-you`, `done`, `error` or `end`. Calls with the same `--name` (or `--id`) update one
@@ -183,7 +183,7 @@ Every feature can be switched off. Settings opens from the gear in the sheet or 
 ## Install
 
 **[Download the latest installer](https://github.com/Vraj93/dynamic-island-windows/releases/latest)**
-(`Dynamic-Island-Setup-<version>.exe`) and run it. The setup wizard shows the license, lets you pick the folder, and adds
+(`Dynamic-Isle-Setup-<version>.exe`) and run it. The setup wizard shows the license, lets you pick the folder, and adds
 Start menu and desktop shortcuts. Uninstall from Windows Settings › Apps.
 
 > [!NOTE]

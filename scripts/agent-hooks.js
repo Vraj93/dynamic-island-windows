@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 'use strict';
 /*
- * Connect AI agents to Dynamic Island, or disconnect them.
+ * Connect AI agents to Dynamic Isle, or disconnect them.
  *   node scripts/agent-hooks.js status                 JSON: each agent, installed?, connected?
  *   node scripts/agent-hooks.js connect <agent>        agent = claude-code | copilot | gemini | cursor | codex
  *   node scripts/agent-hooks.js disconnect <agent>
@@ -146,7 +146,7 @@ const AGENTS = {
       if (text.includes(`# ${MARK}`)) return;
       // Codex allows a single "notify" program; don't replace one you already have.
       if (/^\s*notify\s*=/m.test(text)) throw new Error('Codex already has a "notify" program set in config.toml; leaving it as it is.');
-      const line = `# ${MARK}: tell Dynamic Island when a turn finishes\nnotify = [${[RUN.exe, ...runArgs('--agent', 'codex')].map((x) => `'${x}'`).join(', ')}]\n`;
+      const line = `# ${MARK}: tell Dynamic Isle when a turn finishes\nnotify = [${[RUN.exe, ...runArgs('--agent', 'codex')].map((x) => `'${x}'`).join(', ')}]\n`;
       // Top-level keys must come before the first [table] in TOML.
       const i = text.search(/^\s*\[/m);
       writeFile(this.file, i < 0 ? `${text}${text && !text.endsWith('\n') ? '\n' : ''}${line}` : `${text.slice(0, i)}${line}\n${text.slice(i)}`);

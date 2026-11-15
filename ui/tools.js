@@ -1,5 +1,5 @@
 'use strict';
-/* Dynamic Island: the utility-sheet tools.
+/* Dynamic Isle: the utility-sheet tools.
  * Alarm, Stopwatch, Focus (Pomodoro), Reminders, Note, Clipboard, Shelf, Convert and Settings.
  * Loaded after app.js and plugs into its views, actions, render() and baseView().
  * Alarms, reminders, the note, the shelf and settings are saved on this PC (Electron's local storage).

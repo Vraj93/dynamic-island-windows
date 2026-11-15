@@ -1,8 +1,8 @@
 {
   "name": "dynamic-island",
-  "productName": "Dynamic Island",
+  "productName": "Dynamic Isle",
   "version": "0.2.2",
-  "description": "A Dynamic Island for Windows: media, timers, AI agent status and quick tools at the top of your screen.",
+  "description": "An island at the top of your Windows screen: music, calendar, timers, AI agent status and quick tools.",
   "author": "Vraj93",
   "homepage": "https://github.com/Vraj93/dynamic-island-windows",
   "private": true,
@@ -22,7 +22,7 @@
   },
   "build": {
     "appId": "io.github.vraj93.dynamicisland",
-    "productName": "Dynamic Island",
+    "productName": "Dynamic Isle",
     "copyright": "Copyright © 2026 Vraj93",
     "directories": {
       "output": "dist",
@@ -51,14 +51,14 @@
           ]
         }
       ],
-      "artifactName": "Dynamic-Island-Setup-${version}.${ext}"
+      "artifactName": "Dynamic-Isle-Setup-${version}.${ext}"
     },
     "nsis": {
       "oneClick": false,
       "perMachine": false,
       "allowToChangeInstallationDirectory": true,
       "license": "build/license.txt",
-      "shortcutName": "Dynamic Island",
+      "shortcutName": "Dynamic Isle",
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "runAfterFinish": true,
@@ -66,15 +66,17 @@
       "include": "build/installer.nsh"
     },
     "appx": {
-      "displayName": "Dynamic Island",
+      "displayName": "Dynamic Isle",
       "publisherDisplayName": "Vraj93",
-      "applicationId": "DynamicIsland",
+      "applicationId": "DynamicIsle",
       "identityName": "REPLACE_WITH_PARTNER_CENTER_IDENTITY_NAME",
       "publisher": "CN=REPLACE_WITH_PARTNER_CENTER_PUBLISHER_ID",
       "backgroundColor": "#000000",
       "languages": [
         "en-US"
-      ]
+      ],
+      "addAutoLaunchExtension": true,
+      "customExtensionsPath": "build/appx-extensions.xml"
     }
   }
 }

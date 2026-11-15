@@ -1,5 +1,5 @@
 'use strict';
-/* Dynamic Island: lyrics drawer in the expanded player.
+/* Dynamic Isle: lyrics drawer in the expanded player.
  * Opens from the quote button. Lyrics come from LRCLIB through the main process (electron/lyrics.js), asked only
  * when the drawer is open. Synced lyrics scroll with the music, the line being sung lights up in the cover's colour,
  * and clicking a line jumps there. Loaded after app.js. */

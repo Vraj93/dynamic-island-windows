@@ -1,5 +1,5 @@
 'use strict';
-/* Dynamic Island: Calendar.
+/* Dynamic Isle: Calendar.
  * Your Google / Outlook / linked calendars in the sheet, a heads-up in the island before each event (with a Join
  * button for Meet, Teams and Zoom), and reminders that stay in sync with Google Tasks or Microsoft To Do.
  * Accounts and syncing live in the main process (electron/calendar.js); this file only shows things.

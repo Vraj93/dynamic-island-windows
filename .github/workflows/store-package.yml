@@ -1,0 +1,40 @@
+# Builds the Microsoft Store package (.appx) on GitHub's Windows machine.
+# Run it from the Actions tab (Build Store package > Run workflow), then upload the .appx in Partner Center.
+# The package isn't signed here: the Store signs it after review. Needs the identity values from
+# Partner Center (Product identity) in package.json > build > appx.
+name: Build Store package
+
+on:
+  workflow_dispatch:
+
+jobs:
+  appx:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Check the Store identity is filled in
+        shell: pwsh
+        run: |
+          $appx = (Get-Content package.json -Raw | ConvertFrom-Json).build.appx
+          if ($appx.identityName -match 'REPLACE' -or $appx.publisher -match 'REPLACE') {
+            Write-Error 'Fill in identityName and publisher in package.json > build > appx (Partner Center > Product identity) first.'
+            exit 1
+          }
+
+      - name: Build Store package
+        run: npx electron-builder --win appx --x64 --publish never
+
+      - name: Keep the package
+        uses: actions/upload-artifact@v4
+        with:
+          name: Dynamic-Isle-Store-package
+          path: dist/*.appx

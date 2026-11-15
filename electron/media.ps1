@@ -1,4 +1,4 @@
-# Windows helper for Dynamic Island: now playing, full-screen detection, volume, brightness, Caps Lock.
+# Windows helper for Dynamic Isle: now playing, full-screen detection, volume, brightness, Caps Lock.
 # Reads what Windows says is playing (the same info as the volume flyout / lock screen media controls)
 # and prints one JSON object per line on stdout whenever something changes.
 # Reads commands from stdin, one per line:  toggle | next | prev | seek <seconds> | select <sourceAppId>
@@ -145,7 +145,7 @@ public static class IslandSys {
                         if (start == null || stop == null || Convert.ToInt64(stop) != 0 || Convert.ToInt64(start) == 0) continue;
                         string app = name.Contains("#") ? System.IO.Path.GetFileNameWithoutExtension(name.Substring(name.LastIndexOf('#') + 1))
                             : name.Split('_')[0].Substring(name.Split('_')[0].LastIndexOf('.') + 1);
-                        if (app == "Dynamic Island" || app == "electron") continue; // the island itself (sound bars)
+                        if (app == "Dynamic Isle" || app == "Dynamic Island" || app == "electron") continue; // the island itself (sound bars)
                         long ms = (long)(DateTime.FromFileTimeUtc(Convert.ToInt64(start)) - new DateTime(1970, 1, 1)).TotalMilliseconds;
                         list.Add(app + "|" + ms);
                     }

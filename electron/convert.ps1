@@ -1,4 +1,4 @@
-# File converter for Dynamic Island. Uses only what ships with Windows:
+# File converter for Dynamic Isle. Uses only what ships with Windows:
 #   images: Windows Imaging (WIC) through WPF  -> jpg, png, bmp, tiff, gif   (reads heic if the HEIF extension is installed)
 #   audio / video: Windows Media Foundation transcoder -> mp3, m4a, wav, mp4
 # Prints one JSON line at the end: {"ok":true,"out":...} or {"ok":false,"error":...}

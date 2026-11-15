@@ -1,5 +1,5 @@
 'use strict';
-/* Dynamic Island UI.
+/* Dynamic Isle UI.
  * The Electron main process (electron/main.js) sends:
  *   edge-enter / edge-open / edge-exit   mouse at the top-centre edge
  *   media                                what Windows says is playing (from electron/media.ps1)

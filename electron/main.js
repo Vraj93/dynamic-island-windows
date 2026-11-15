@@ -1,16 +1,16 @@
 'use strict';
 /*
- * Dynamic Island - main process.
+ * Dynamic Isle - main process.
  * One see-through, always-on-top window pinned to the top-centre of the main screen.
  *  - Clicks pass straight through it, except where the island is drawn (the UI reports that area).
  *  - The mouse is watched for the top-edge "hover zone" that opens the utility sheet.
  * All coordinates here are Windows display pixels (DIP), the same unit as CSS pixels in the UI.
  */
 // Hook mode: AI agents run the island's own program as their hook, so no Node.js is needed on the PC.
-//   "Dynamic Island.exe" --agent-hook --agent <name> [...]   (reads the agent's event, reports it, exits; no window)
+//   "Dynamic Isle.exe" --agent-hook --agent <name> [...]   (reads the agent's event, reports it, exits; no window)
 // The same mode is the universal command for any other agent or script (--name, --event, --text).
 // Hook mode: agents run this app as their hook, and any script can post to the island:
-//   "Dynamic Island.exe" --island --name "My build" --event done --text "All tests passed"
+//   "Dynamic Isle.exe" --island --name "My build" --event done --text "All tests passed"
 if (process.argv.includes('--agent-hook') || process.argv.includes('--island')) {
   require('./hooks/agent-hook.js');
   return;
@@ -439,11 +439,13 @@ function applySettings(s) {
   mediaCommand(s.volumeKeys === false ? 'volkeys off' : 'volkeys on');
   applyMicKey(s.micKey);
   // Start with Windows: run this same Electron with this app folder (works with Smart App Control on).
-  try {
+  // The Store version starts with Windows through its own startup task (Windows Settings › Apps › Startup).
+  if (!process.windowsStore) try {
     const args = loginArgs();
     // Earlier builds registered under Electron's default name; remove that so there's only one entry.
     app.setLoginItemSettings({ openAtLogin: false, path: process.execPath, args, name: 'electron.app.Electron' });
-    app.setLoginItemSettings({ openAtLogin: !!s.startWithWindows, path: process.execPath, args, name: 'Dynamic Island' });
+    app.setLoginItemSettings({ openAtLogin: false, path: process.execPath, args, name: 'Dynamic Island' }); // the name before the rename
+    app.setLoginItemSettings({ openAtLogin: !!s.startWithWindows, path: process.execPath, args, name: 'Dynamic Isle' });
   } catch (e) { log('login item: ' + e.message); }
 }
 
@@ -455,7 +457,7 @@ function openSettings(section) {
   settingsWin = new BrowserWindow({
     width: 980, height: 660, minWidth: 760, minHeight: 520,
     center: true, show: false,
-    title: 'Dynamic Island Settings',
+    title: 'Dynamic Isle Settings',
     icon: path.join(__dirname, '..', 'assets', 'app-icon.png'),
     backgroundColor: '#141416',
     titleBarStyle: 'hidden',
@@ -492,8 +494,9 @@ ipcMain.handle('app-info', () => ({
   version: app.getVersion(),
   electron: process.versions.electron,
   packaged: app.isPackaged,
+  store: !!process.windowsStore,
   // The command any script uses to post to the island.
-  islandCmd: `"${process.execPath}"${app.isPackaged ? '' : ` "${app.getAppPath()}"`} --island`,
+  islandCmd: process.windowsStore ? 'dynamicisle --island' : `"${process.execPath}"${app.isPackaged ? '' : ` "${app.getAppPath()}"`} --island`,
   dataFolder: app.getPath('userData'),
 }));
 
@@ -513,7 +516,7 @@ ipcMain.on('shelf-drag', async (e, filePath) => {
   if (!icon) { try { icon = await app.getFileIcon(filePath, { size: 'normal' }); } catch { icon = nativeImage.createFromPath(path.join(__dirname, '..', 'assets', 'tray.png')); } }
   e.sender.startDrag({ file: filePath, icon });
 });
-ipcMain.handle('login-item', () => app.getLoginItemSettings({ path: process.execPath, args: loginArgs(), name: 'Dynamic Island' }).openAtLogin);
+ipcMain.handle('login-item', () => app.getLoginItemSettings({ path: process.execPath, args: loginArgs(), name: 'Dynamic Isle' }).openAtLogin);
 
 /* ---------- file converter ---------- */
 const IMAGE_IN = /\.(jpe?g|png|bmp|gif|tiff?|heic|heif|webp|ico|jxr)$/i;
@@ -595,12 +598,31 @@ ipcMain.handle('pick-files', async () => {
 
 /* ---------- AI agents: which are installed / connected; connect or disconnect one ----------
  * Runs scripts/agent-hooks.js inside the app (no Node.js needed). The hooks it writes run this same program in
- * hook mode ("Dynamic Island.exe --agent-hook ...", see the top of this file), so they work on any PC. */
+ * hook mode ("Dynamic Isle.exe --agent-hook ...", see the top of this file), so they work on any PC. */
 const AGENT_IDS = ['claude-code', 'copilot', 'gemini', 'cursor', 'codex'];
 function agentHooks() {
   const m = require(path.join(UNPACKED_ROOT, 'scripts', 'agent-hooks.js'));
-  m.setRunner(process.execPath, app.isPackaged ? [] : [app.getAppPath()]);
+  // The Store version lives in a protected folder other programs can't run directly; it has a short command instead.
+  m.setRunner(process.windowsStore ? 'dynamicisle.exe' : process.execPath, app.isPackaged ? [] : [app.getAppPath()]);
   return m;
+}
+/* Connected agents keep working after the app moves or is renamed (an update, the Store version): if an agent's
+ * hooks point at a different program than this one, set them up again for this one. */
+function refreshAgentHooks() {
+  if (!app.isPackaged) return; // when run from source the program is electron.exe; leave hooks alone
+  try {
+    const m = agentHooks();
+    for (const [id, a] of Object.entries(m.AGENTS)) {
+      try {
+        if (!a.connected()) continue;
+        const text = fs.existsSync(a.file) ? fs.readFileSync(a.file, 'utf8') : '';
+        const exe = process.windowsStore ? 'dynamicisle.exe' : process.execPath;
+        if (text.includes(exe) || text.includes(JSON.stringify(exe).slice(1, -1))) continue;
+        a.disconnect(); a.connect();
+        log(`agent hooks for ${id} now point at ${process.execPath}`);
+      } catch (e) { log(`agent hooks ${id}: ${e.message}`); }
+    }
+  } catch (e) { log('agent hooks refresh: ' + e.message); }
 }
 ipcMain.handle('agent-hooks', (_e, req) => {
   const cmd = req && req.cmd, agent = req && req.agent;
@@ -627,7 +649,7 @@ ipcMain.handle('lyrics', (_e, song) => (settings.lyrics === false || !song ? { s
 function createTray() {
   // tray.ico holds a separately drawn image for each size Windows uses (made by scripts/make-icons.ps1).
   tray = new Tray(nativeImage.createFromPath(path.join(__dirname, '..', 'assets', 'tray.ico')));
-  tray.setToolTip('Dynamic Island');
+  tray.setToolTip('Dynamic Isle');
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: 'Open utility sheet', click: () => send({ type: 'edge-open' }) },
     { label: 'Settings…', click: () => openSettings() },
@@ -658,6 +680,7 @@ if (!app.requestSingleInstanceLock()) {
     startMedia();
     applySettings(settings);
     startAgentServer();
+    setTimeout(refreshAgentHooks, 4000);
     calendar.start({ log, getSettings: () => settings, onChange: (snap) => {
       send(snap);
       if (settingsWin && !settingsWin.isDestroyed()) settingsWin.webContents.send('host', snap);

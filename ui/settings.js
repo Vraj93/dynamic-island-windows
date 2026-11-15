@@ -70,7 +70,8 @@ const SECTIONS = {
       ${item('chimes', 'Sounds', 'Chimes for timers, alarms, reminders, Focus and Claude Code.')}
       ${item('clipboard', 'Clipboard history', 'Remembers the last 30 pieces of text you copy (pinned ones stay until you unpin them). Copies from password managers are never kept.')}
       ${item('clipKeep', 'Keep clipboard history after a restart', 'Saved encrypted for your Windows account, on this PC only. Off: forgotten when the island closes.', !S.clipboard)}
-      ${item('startWithWindows', 'Start with Windows', 'Open the island when you sign in.')}
+      ${info.store ? `<div class="item"><div class="t"><div class="n">Start with Windows</div><div class="s">On by default for the Store version. Turn it on or off in Windows Settings › Apps › Startup.</div></div></div>`
+        : item('startWithWindows', 'Start with Windows', 'Open the island when you sign in.')}
     </div>`,
 
   sheet: () => `<h1>Utility sheet</h1><p class="lead">The panel with the clock, battery and tools that drops down from the top edge.</p>
@@ -174,7 +175,7 @@ const SECTIONS = {
     <div class="card"><div class="item" style="display:block">
       <div class="s" style="margin:0 0 10px">Anything that can run a command can show itself in the island: a build, a test run, a deploy, a backup, or an AI agent not listed above. Use the same <b>--name</b> (or <b>--id</b>) to update one island; <b>--event</b> is start, step, needs-you, done, error or end.</div>
       ${[['start', 'Build and test'], ['step', 'Compiling 214 files'], ['done', 'All 512 tests passed'], ['error', '3 tests failed']].map(([ev, t]) => {
-        const cmd = `${info.islandCmd ? (/^"/.test(info.islandCmd) ? '& ' : '') + info.islandCmd : '"Dynamic Island.exe" --island'} --name "Nightly build" --event ${ev} --text "${t}"`;
+        const cmd = `${info.islandCmd ? (/^"/.test(info.islandCmd) ? '& ' : '') + info.islandCmd : '"Dynamic Isle.exe" --island'} --name "Nightly build" --event ${ev} --text "${t}"`;
         return `<div class="cmdrow"><code>${esc(cmd)}</code><button class="btn" data-copy="${esc(cmd)}">Copy</button></div>`;
       }).join('')}
       <div class="s" style="margin-top:8px">Optional: <b>--color "#ff9f0a"</b> for its colour, <b>--project</b> for a subtitle. The "&amp; " in front is for PowerShell; leave it out in Command Prompt or scripts.</div>
@@ -199,7 +200,7 @@ const SECTIONS = {
       ${item('privacyDots', 'Microphone, camera and screen-capture dots', 'A small dot on the island while any app uses them: orange for the microphone, green for the camera, blue for screen capture.')}
     </div>`,
 
-  about: () => `<h1>About</h1><p class="lead">Dynamic Island for Windows${info.version ? ' · version ' + esc(info.version) : ''}.</p>
+  about: () => `<h1>About</h1><p class="lead">Dynamic Isle${info.version ? ' · version ' + esc(info.version) : ''}.</p>
     <div class="card">
       <div class="item"><div class="t"><div class="n">License</div><div class="s">MIT: free to use, change and share.</div></div><button class="btn" data-open="repo">GitHub page</button></div>
       <div class="item"><div class="t"><div class="n">Your data</div><div class="s">Settings, alarms, reminders, your note and the shelf list are stored on this PC only.</div></div><button class="btn" data-open="data">Open folder</button></div>

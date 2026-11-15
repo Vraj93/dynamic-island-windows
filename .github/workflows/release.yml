@@ -31,7 +31,7 @@ jobs:
       - name: Keep the installer as a build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Dynamic-Island-Setup
+          name: Dynamic-Isle-Setup
           path: dist/*.exe
 
       - name: Attach to the release
@@ -41,7 +41,7 @@ jobs:
           files: dist/*.exe
           generate_release_notes: true
           body: |
-            Windows installer for Dynamic Island. Download `Dynamic-Island-Setup-*.exe` and run it.
+            Windows installer for Dynamic Isle. Download `Dynamic-Isle-Setup-*.exe` and run it.
 
             The installer isn't code-signed yet, so Windows SmartScreen may say "Windows protected your PC":
             click **More info** → **Run anyway**. On PCs with Smart App Control turned on, Windows blocks

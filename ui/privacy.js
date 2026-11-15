@@ -1,5 +1,5 @@
 'use strict';
-/* Dynamic Island: calls and privacy.
+/* Dynamic Isle: calls and privacy.
  *  - A call timer while any app is using the microphone, with a mute button.
  *  - Ctrl+Alt+M (changeable in Settings) mutes the microphone in Windows itself, so in every app at once.
  *  - Coloured dots while the microphone (orange), camera (green) or screen capture (blue) is in use.

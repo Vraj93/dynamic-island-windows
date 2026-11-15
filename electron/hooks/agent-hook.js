@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 'use strict';
 /*
- * One hook for every AI agent that reports to Dynamic Island.
+ * One hook for every AI agent that reports to Dynamic Isle.
  *   node agent-hook.js --agent <claude-code|copilot|gemini|cursor|codex> [--event <name>]
  * Each agent calls it in its own way (JSON on stdin, or JSON as the last argument for Codex).
  * We translate the agent's event into the island's format and send it over 127.0.0.1.
@@ -146,7 +146,7 @@ function post(info, route, payload, timeoutMs) {
 }
 
 /* Any program or script, no setup:
- *   "Dynamic Island.exe" --island --name "Nightly build" --event start|step|needs-you|done|error|end [--text "..."] [--id <run>]
+ *   "Dynamic Isle.exe" --island --name "Nightly build" --event start|step|needs-you|done|error|end [--text "..."] [--id <run>]
  * Calls with the same --id (default: the name) update the same island. */
 function custom() {
   const name = cut(String(arg('name') || 'Script'), 40), text = cut(String(arg('text') || ''), 600);
@@ -185,10 +185,10 @@ async function main() {
     if (decision !== 'allow' && decision !== 'deny') return; // no answer: the agent asks you as usual
     answered = true;
     if (AGENT === 'claude-code') {
-      const d = decision === 'allow' ? { behavior: 'allow' } : { behavior: 'deny', message: 'Denied from Dynamic Island.' };
+      const d = decision === 'allow' ? { behavior: 'allow' } : { behavior: 'deny', message: 'Denied from Dynamic Isle.' };
       process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName: 'PermissionRequest', decision: d } }));
     } else {
-      process.stdout.write(JSON.stringify(decision === 'allow' ? { behavior: 'allow' } : { behavior: 'deny', message: 'Denied from Dynamic Island.' }));
+      process.stdout.write(JSON.stringify(decision === 'allow' ? { behavior: 'allow' } : { behavior: 'deny', message: 'Denied from Dynamic Isle.' }));
     }
     await new Promise((r) => process.stdout.write('', r)); // make sure the answer is flushed before exiting
     return;
