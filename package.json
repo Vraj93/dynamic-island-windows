@@ -67,10 +67,10 @@
     },
     "appx": {
       "displayName": "Dynamic Isle",
-      "publisherDisplayName": "Vraj93",
+      "publisherDisplayName": "Vraj",
       "applicationId": "DynamicIsle",
-      "identityName": "REPLACE_WITH_PARTNER_CENTER_IDENTITY_NAME",
-      "publisher": "CN=REPLACE_WITH_PARTNER_CENTER_PUBLISHER_ID",
+      "identityName": "Vraj.DynamicIsle",
+      "publisher": "CN=9B187EAB-7CDA-4073-9840-7AF10C30DE82",
       "backgroundColor": "#000000",
       "languages": [
         "en-US"
