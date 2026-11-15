@@ -88,7 +88,7 @@ Productivity (subcategory: none needed). Alternative: Utilities & tools.
 
 ## Privacy policy URL
 
-The public address of privacy-policy.md once it's published (see below).
+https://github.com/Vraj93/Vraj93/blob/main/dynamic-isle-privacy.md
 
 ---
 
