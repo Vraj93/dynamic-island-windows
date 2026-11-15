@@ -74,6 +74,7 @@
       render('sheet');
     },
     player() { music(); render('mediaExpanded'); },
+    ytvideo() { music(); state.lyricsOpen = true; Object.assign(state.media, { source: 'Brave', title: 'VRS GT-2 Cockpit Review - They Tried Something Different', artist: 'Danny Lawrence', album: '', duration: 698 }); render('mediaExpanded'); },
     call() { music(); state.priv = { mic: [{ app: 'Teams', since: now - 754000 }], cam: [{ app: 'Teams', since: now - 700000 }], screen: [], micMuted: 0 }; render('callCompact'); },
     callmuted() { state.priv = { mic: [{ app: 'Zoom', since: now - 1912000 }], cam: [], screen: [{ app: 'Zoom', since: now - 60000 }], micMuted: 1 }; render('callExpanded'); },
     camdot() { music(); state.priv = { mic: [], cam: [{ app: 'WindowsCamera', since: now - 9000 }], screen: [], micMuted: 0 }; render('mediaCompact'); },

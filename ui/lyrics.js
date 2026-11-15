@@ -9,7 +9,7 @@ state.lyrics = null; // { key, status: 'loading' | 'ok' | 'none' | 'instrumental
 
 const songKey = (m) => (m ? `${m.title}|${m.artist}|${m.album}` : '');
 // Videos (no artist, or very long) would put the lines out of time; music apps and music sites are fine.
-const looksLikeVideo = (m) => !m.artist || m.duration > 20 * 60;
+const looksLikeVideo = (m) => isVideoMedia(m);
 
 function loadLyrics() {
   const m = state.media;

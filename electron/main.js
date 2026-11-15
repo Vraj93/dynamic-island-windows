@@ -62,21 +62,6 @@ function log(text) {
   try { fs.appendFileSync(logFile, `${new Date().toISOString()} ${text}\n`); } catch { /* never crash on logging */ }
 }
 
-/* The window is only as big as what the island shows (plus room for its shadow and a side island), always
- * centred at the top of the screen. A see-through window is redrawn in full on every animation frame, so a
- * small window keeps the graphics work small. The island asks for a new size as its screens change. */
-let fitW = 0, fitH = 0;
-function fitWindow(w, h) {
-  if (!win || win.isDestroyed()) return;
-  const d = screen.getPrimaryDisplay().bounds;
-  let width = Math.min(Math.max(Math.ceil(Number(w) || 0), 360), Math.min(WIN_W_MAX, d.width));
-  width += width % 2; // even, so the island stays on the same pixel when the window changes size
-  const height = Math.min(Math.max(Math.ceil(Number(h) || 0), 40), WIN_H);
-  if (width === fitW && height === fitH) return;
-  fitW = width; fitH = height;
-  win.setBounds({ x: Math.round(d.x + (d.width - width) / 2), y: d.y, width, height });
-}
-
 function windowBounds() {
   const d = screen.getPrimaryDisplay().bounds;
   const WIN_W = Math.min(WIN_W_MAX, d.width);
@@ -136,7 +121,6 @@ ipcMain.on('ui', (_e, msg) => {
       }
       break;
     case 'rects': rects = Array.isArray(msg.rects) ? msg.rects : []; break;
-    case 'win-size': fitWindow(msg.w, msg.h); break;
     case 'log': log('ui: ' + msg.text); break;
     case 'media-cmd': mediaCommand(msg.cmd); break;
     case 'agent-decision': answerPermission(msg.reqId, msg.decision); break;
@@ -683,7 +667,7 @@ if (!app.requestSingleInstanceLock()) {
     (function pollLoop() { poll(); setTimeout(pollLoop, pollNear ? 16 : 50); })();
     setInterval(pollClipboard, 800);
     // Re-pin to the top-centre if screens or scaling change.
-    const replace = () => { if (!win) return; const w = fitW, h = fitH; fitW = fitH = 0; if (w) fitWindow(w, h); else win.setBounds(windowBounds()); };
+    const replace = () => win && win.setBounds(windowBounds());
     screen.on('display-metrics-changed', replace);
     screen.on('display-added', replace);
     screen.on('display-removed', replace);

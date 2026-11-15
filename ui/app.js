@@ -625,7 +625,7 @@ const views = {
           <span class="f13 sp" style="font-weight:600">${esc(si.name)}</span><span class="d f12">${esc(s.status)}</span></button>`;
       }).join('')}</div>` : '';
     // Three parts: the big cover alone on the left; on the right, lyrics on top and the song with its controls below.
-    const lyr = state.lyricsOpen && prefs.lyrics !== false;
+    const lyr = state.lyricsOpen && prefs.lyrics !== false && !isVideoMedia(m);
     return {
       html: `<div class="v mexp${lyr ? ' withlyr' : ''}">
         <div class="tint"></div>
@@ -635,7 +635,7 @@ const views = {
             <div class="row" style="gap:8px">
               <${many ? 'button' : 'span'} class="src" ${many ? 'data-act="sources"' : ''}><span style="width:7px;height:7px;border-radius:50%;background:${src.color}"></span>${esc(src.name)}${many ? ' ▾' : ''}</${many ? 'button' : 'span'}>
               <span class="sp"></span>
-              ${prefs.lyrics !== false ? `<button class="lyrbtn${lyr ? ' on' : ''}" data-act="lyrics" aria-label="Lyrics" title="Lyrics">${I.lyrics}</button>` : ''}
+              ${prefs.lyrics !== false && !isVideoMedia(m) ? `<button class="lyrbtn${lyr ? ' on' : ''}" data-act="lyrics" aria-label="Lyrics" title="Lyrics">${I.lyrics}</button>` : ''}
               <button class="x" data-act="hideMedia" aria-label="Hide until something else plays" title="Hide until something else plays">${I.close}</button>
             </div>
             ${lyr ? lyricsDrawer() : `<div class="mtitle">
@@ -697,7 +697,6 @@ function render(name, { animate } = {}) {
       if (state.view !== 'none') return;
       snapSize(LIP.w, LIP.h, LIP.r);
       sendRects();
-      islandSize = { w: LIP.w, h: LIP.h }; requestWin();
     }, 260);
     updateBubble();
     return;
@@ -710,7 +709,6 @@ function render(name, { animate } = {}) {
   // Round up, so text is never cut by a fraction of a pixel ("Claude Co…").
   const box = root.getBoundingClientRect(), w = Math.ceil(box.width), h = Math.ceil(box.height);
   measurer.innerHTML = ''; // measured: empty it, so its hidden copy of the animations stops running
-  islandSize = { w, h }; requestWin();
 
   if (island.classList.contains('gone')) {
     // Coming back from hidden: start from the small lip, never from the last panel size.
@@ -807,22 +805,6 @@ function bubbleKind() {
   return '';
 }
 function bubbleWanted() { return !!bubbleKind(); }
-/* Ask the main process for a window just big enough for the island (and a side island), with room for
- * shoulders and shadow. Grow at once; shrink only after the closing animation, so nothing is ever cut off. */
-let islandSize = { w: LIP.w, h: LIP.h }, sentWin = { w: 0, h: 0 }, shrinkTimer = null;
-function requestWin() {
-  const SHADOW = 64;
-  let half = islandSize.w / 2 + 16 + SHADOW;
-  if (bubbleWanted()) half = Math.max(half, islandSize.w / 2 + 42 + (bubble.offsetWidth || 220) + 16 + 24);
-  const need = { w: Math.ceil(half * 2), h: Math.ceil(Math.max(islandSize.h, 38) + SHADOW + 24) };
-  const grow = { w: Math.max(need.w, sentWin.w), h: Math.max(need.h, sentWin.h) };
-  if (grow.w !== sentWin.w || grow.h !== sentWin.h) { sentWin = grow; post({ type: 'win-size', w: grow.w, h: grow.h }); }
-  clearTimeout(shrinkTimer);
-  if (need.w < sentWin.w || need.h < sentWin.h) {
-    shrinkTimer = setTimeout(() => { sentWin = need; post({ type: 'win-size', w: need.w, h: need.h }); }, 900);
-  }
-}
-
 function updateBubble() {
   const kind = bubbleKind(), want = !!kind;
   if (kind === 'timer') {
@@ -846,7 +828,6 @@ function updateBubble() {
   if (kind !== 'media') bubble.dataset.html = '';
   bubble.dataset.kind = kind;
   bubble.classList.toggle('gone', !want);
-  requestWin(); // room for the side island, or give it back
   positionBubble();
   trackRects(1100);
 }
@@ -1044,6 +1025,16 @@ function clearTimer() {
 
 /* ---------------- media updates ---------------- */
 let peekTimer = null;
+/* A video, not a song: no lyrics and no cover lookup for it. Plain YouTube, Netflix, Twitch... in a browser
+ * report no album (YouTube Music, Spotify and Apple Music on the web do), VLC shows files, and anything with no
+ * artist or over 20 minutes is a video too. */
+const BROWSER_RE = /chrome|msedge|edge|firefox|308046B0AF4A39CB|opera|brave|vivaldi/i;
+function isVideoMedia(m) {
+  if (!m) return false;
+  if (m.readOnly || !String(m.artist || '').trim() || m.duration > 20 * 60) return true;
+  return BROWSER_RE.test(m.source || '') && !String(m.album || '').trim();
+}
+
 /* Missing covers (browsers often send none, or just their own logo): look the song up online once and use that.
  * The found cover stays for this song even though the browser keeps sending its logo. */
 state.found = null; // { key, from: what the app sent, url }
@@ -1051,7 +1042,7 @@ function findCover(m) {
   if (!host || prefs.findCovers === false || !m || !m.title || m.readOnly) return;
   // Only look up songs: a bare title with no artist ("Netflix" in Chrome) would match some other song's cover
   // ("Netflix (Trap Remix)"). Streaming services get their own logo instead.
-  if (!String(m.artist || '').trim() || brandOf(m.title)) return;
+  if (isVideoMedia(m) || brandOf(m.title)) return;
   const key = mediaKey(m);
   if (state.found && state.found.key === key) return;
   state.found = { key, from: m.art || null, url: null };
