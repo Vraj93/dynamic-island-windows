@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- electron-builder's template, plus the uap3 namespace for the dynamicisle command (build/appx-extensions.xml). -->
+<!-- electron-builder template plus the uap3 namespace, used by build/appx-extensions.xml: the dynamicisle command that lets agents run the Store version. No double hyphens in XML comments. -->
 <Package
    xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
    xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"

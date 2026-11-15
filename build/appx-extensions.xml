@@ -1,7 +1,4 @@
-        <!-- Store version: a short command name, so AI agents and scripts can run the app's hook mode
-             ("dynamicisle --island ...") even though Store apps live in a protected folder. -->
-        <uap3:Extension
-          Category="windows.appExecutionAlias" Executable="app\Dynamic Isle.exe" EntryPoint="Windows.FullTrustApplication">
+        <uap3:Extension Category="windows.appExecutionAlias" Executable="app\Dynamic Isle.exe" EntryPoint="Windows.FullTrustApplication">
           <uap3:AppExecutionAlias>
             <desktop:ExecutionAlias Alias="dynamicisle.exe" />
           </uap3:AppExecutionAlias>
