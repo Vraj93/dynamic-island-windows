@@ -44,14 +44,18 @@ public static class IslandFg {
     [DllImport("user32.dll")] static extern bool GetMonitorInfo(IntPtr m, ref MONITORINFO mi);
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetClassName(IntPtr h, StringBuilder s, int n);
     [DllImport("user32.dll")] static extern bool IsZoomed(IntPtr h);
+    [DllImport("user32.dll")] static extern int GetWindowLong(IntPtr h, int index);
     public static bool FullscreenOnPrimary() {
         IntPtr h = GetForegroundWindow();
         if (h == IntPtr.Zero || h == GetShellWindow() || h == GetDesktopWindow()) return false;
         var sb = new StringBuilder(64); GetClassName(h, sb, 64);
         string c = sb.ToString();
         if (c == "Progman" || c == "WorkerW" || c == "Shell_TrayWnd" || c == "Windows.UI.Core.CoreWindow") return false;
-        // A maximised window can also cover the screen (e.g. with an auto-hiding taskbar); that's not full screen.
-        if (IsZoomed(h)) return false;
+        // A maximised window can also cover the screen (with an auto-hiding taskbar), but it keeps its title bar.
+        // Full-screen video and games have none. (Don't go by "maximised": a browser that was maximised stays
+        // flagged as maximised while a YouTube video is full screen.)
+        const int WS_CAPTION = 0x00C00000;
+        if ((GetWindowLong(h, -16) & WS_CAPTION) == WS_CAPTION) return false;
         RECT r; if (!GetWindowRect(h, out r)) return false;
         var mi = new MONITORINFO(); mi.cbSize = Marshal.SizeOf(typeof(MONITORINFO));
         if (!GetMonitorInfo(MonitorFromWindow(h, 2), ref mi)) return false;
