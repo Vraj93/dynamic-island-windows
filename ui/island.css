@@ -23,6 +23,9 @@ body.demo{background:
 }
 #island.gone{opacity:0;pointer-events:none}
 #island.quick{transition-duration:.28s}
+/* Opening a big panel from the lip (the sheet): an even ease-out instead of the spring. The spring covers most of
+   the distance in the first two frames, which on a big panel reads as a jump, then crawls the rest of the way. */
+#island.grow{transition:width .52s cubic-bezier(.32,.72,0,1),height .52s cubic-bezier(.32,.72,0,1),border-radius .52s cubic-bezier(.32,.72,0,1),opacity .18s ease,box-shadow .3s}
 /* curved shoulders where the island meets the top edge of the screen */
 #island::before,#island::after{content:"";position:absolute;top:0;width:16px;height:16px;pointer-events:none}
 #island::before{left:-16px;background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M0 0H16V16A16 16 0 0 0 0 0Z'/%3E%3C/svg%3E") 0 0/16px 16px no-repeat}

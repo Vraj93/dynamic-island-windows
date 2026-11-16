@@ -725,6 +725,9 @@ function render(name, { animate } = {}) {
     island.style.setProperty('--rc', v.ring.color);
     island.style.setProperty('--rgb', v.ring.rgb);
   }
+  // growing a big panel out of something small (the lip or nothing): even ease-out, see #island.grow
+  const fromW = island.offsetWidth, fromH = island.offsetHeight;
+  island.classList.toggle('grow', changed && w * h > 120000 && fromW * fromH < w * h / 4);
   island.style.width = w + 'px';
   island.style.height = h + 'px';
   island.style.setProperty('--r', (v.radius || Math.min(34, h / 2)) + 'px');
