@@ -428,7 +428,9 @@ views.dropZone = () => panel(`<div class="row" style="gap:12px;pointer-events:no
     <div class="drop dz sp" data-drop="shelf" style="height:170px;border-color:rgba(48,209,88,.55)"><span class="ic" style="background:rgba(48,209,88,.16);color:#30d158;width:46px;height:46px;border-radius:23px">${I.shelf}</span>
       <div><div class="f15">Keep on shelf</div><div class="d f12">Hold it for later</div></div></div>
     <div class="drop dz sp" data-drop="convert" style="height:170px;border-color:rgba(64,200,224,.6)"><span class="ic" style="background:rgba(64,200,224,.18);color:#40c8e0;width:46px;height:46px;border-radius:23px">${I.convert}</span>
-      <div><div class="f15">Convert</div><div class="d f12">Change the format</div></div></div></div>`, 520);
+      <div><div class="f15">Convert</div><div class="d f12">Change the format</div></div></div>
+    <div class="drop dz sp" data-drop="compress" style="height:170px;border-color:rgba(255,149,0,.6)"><span class="ic" style="background:rgba(255,149,0,.18);color:#ff9500;width:46px;height:46px;border-radius:23px">${I.compress}</span>
+      <div><div class="f15">Compress</div><div class="d f12">Make it smaller</div></div></div></div>`, 720);
 Object.assign(actions, {
   shelfRemove(i) { T.shelf.splice(+i, 1); store.set('shelf', T.shelf); render('shelf'); },
   shelfClear() { T.shelf = []; store.set('shelf', T.shelf); render('shelf'); },
@@ -459,7 +461,8 @@ document.addEventListener('dragstart', (e) => {
  * under the pointer are swapped, which made the screen flicker back and forth. */
 let dragLastOver = 0, dragReturn = null, dragSide = '';
 const hasFiles = (e) => e.dataTransfer && [...e.dataTransfer.types].includes('Files');
-function dragSideAt(x) { const r = island.getBoundingClientRect(); return x < r.left + r.width / 2 ? 'shelf' : 'convert'; }
+// three side-by-side squares: shelf | convert | compress
+function dragSideAt(x) { const r = island.getBoundingClientRect(), k = (x - r.left) / r.width; return k < 1 / 3 ? 'shelf' : k < 2 / 3 ? 'convert' : 'compress'; }
 function markSide(side) {
   dragSide = side;
   document.querySelectorAll('.dz').forEach((z) => z.classList.toggle('hot', z.dataset.drop === side));
@@ -489,7 +492,7 @@ document.addEventListener('drop', async (e) => {
   dragLastOver = 0;
   const paths = [...e.dataTransfer.files].map((f) => (host ? host.pathFor(f) : '')).filter(Boolean);
   if (!paths.length) { render(dragReturn || baseView()); return; }
-  if (dragReturn === 'compress') {
+  if (dragSideAt(e.clientX) === 'compress') {
     T.cmp = { ...T.cmp, files: paths, results: null, progress: [] };
     render('compress');
   } else if (dragSideAt(e.clientX) === 'convert') {

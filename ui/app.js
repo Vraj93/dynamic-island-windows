@@ -1247,7 +1247,7 @@ function onAgentEvent(ev, fromPermission) {
     state.agents.set(ev.session_id, a);
   }
   a.updated = now;
-  if (ev.cwd) a.project = baseName(ev.cwd);
+  if (ev.cwd && !a.project) a.project = baseName(ev.cwd); // keep the folder the chat started in, even if it later works in a subfolder
   if (ev.session_title) a.title = ev.session_title;
   // Scripts and other programs name themselves (--name) and may pick a colour.
   if (ev.agent_name) a.agentName = String(ev.agent_name).slice(0, 40);
