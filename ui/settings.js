@@ -167,9 +167,10 @@ const SECTIONS = {
         ${agentError[id] ? `<div class="s" style="color:#ff8a84">${esc(agentError[id])}</div>` : ''}</div>
         <button class="btn ${a.connected ? '' : 'primary'}" data-agent="${id}" data-cmd="${a.connected ? 'disconnect' : 'connect'}" ${a.installed || a.connected ? '' : 'disabled style="opacity:.4"'}>${a.connected ? 'Disconnect' : 'Connect'}</button></div>`).join('')
       : '<div class="item"><div class="t"><div class="s">Checking which agents are on this PC…</div></div></div>';
-    return `<h1>AI agents</h1><p class="lead">See what your coding agents are doing, and answer permission requests from the island.</p>
-    <div class="card">${item('agents', 'Show AI agents in the island', 'Off: agents ask in their own windows as usual.')}</div>
-    <div class="sec">Agents</div>
+    return `<h1>AI agents</h1><p class="lead">See when your coding agents are working and when they're done, with nothing to set up. Connect an agent below for more detail: its steps, the code it's changing, and Allow / Deny from the island.</p>
+    <div class="card">${item('agents', 'Show AI agents in the island', 'Off: agents ask in their own windows as usual.')}
+      ${item('agentDetect', 'Notice agents automatically', 'Shows Claude Code, Codex, Gemini CLI, Copilot CLI, Cursor Agent, Aider, Qwen Code, Amp, opencode, Goose and Crush while they work, by watching whether their program is busy. No setup or restart needed.', !S.agents)}</div>
+    <div class="sec">More detail: connect an agent</div>
     <div class="card">${rows}</div>
     <div class="sec">Any other agent, script or build tool</div>
     <div class="card"><div class="item" style="display:block">
@@ -180,7 +181,7 @@ const SECTIONS = {
       }).join('')}
       <div class="s" style="margin-top:8px">Optional: <b>--color "#ff9f0a"</b> for its colour, <b>--project</b> for a subtitle. The "&amp; " in front is for PowerShell; leave it out in Command Prompt or scripts.</div>
     </div></div>
-    <p class="lead" style="margin-top:14px">Connecting adds small hooks to that agent's own settings (a backup is made first); nothing else needs installing. They never slow the agent down, and if the island isn't running, or you don't answer within 55 seconds, the agent asks you as usual.</p>`;
+    <p class="lead" style="margin-top:14px">Connecting adds small hooks to that agent's own settings (a backup is made first); nothing else needs installing. <b>Start a new session of the agent afterwards</b>: agents read their hooks when a session starts (Claude Code may also ask you to review them in /hooks). They never slow the agent down, and if the island isn't running, or you don't answer within 55 seconds, the agent asks you as usual.</p>`;
   },
 
   popups: () => `<h1>System pop-ups</h1><p class="lead">Short pop-ups in the island for system changes. Each shows for about two seconds.</p>

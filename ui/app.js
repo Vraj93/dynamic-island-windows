@@ -45,7 +45,7 @@ const state = {
 };
 const HUD_MS = 1800;
 // Preferences from the Settings window (kept in sync by tools.js).
-const prefs = { media: true, mediaPeek: true, lyrics: true, findCovers: true, hideFullscreen: true, chimes: true, hudVolume: true, hudBrightness: true, hudCaps: true, hudBattery: true,
+const prefs = { media: true, mediaPeek: true, lyrics: true, findCovers: true, agents: true, agentDetect: true, hideFullscreen: true, chimes: true, hudVolume: true, hudBrightness: true, hudCaps: true, hudBattery: true,
   tiles: ['calendar', 'timer', 'alarm', 'focus', 'reminder', 'note', 'clipboard', 'shelf', 'convert'] };
 const mediaKey = (x) => (x && x.active ? `${x.source}|${x.title}|${x.artist}` : '');
 const DONE_SHOW_MS = 90 * 1000; // a finished agent stays in the island this long
@@ -282,7 +282,8 @@ const check = (s = 18) => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" f
 const AGENT_NAME = 'Claude Code';
 const AGENT_COMPACT_W = 420;
 // Display names for each agent that can report to the island (see electron/hooks/agent-hook.js).
-const AGENT_NAMES = { 'claude-code': 'Claude Code', codex: 'Codex', gemini: 'Gemini', copilot: 'Copilot', cursor: 'Cursor' };
+const AGENT_NAMES = { 'claude-code': 'Claude Code', codex: 'Codex', gemini: 'Gemini', copilot: 'Copilot', cursor: 'Cursor',
+  qwen: 'Qwen Code', amp: 'Amp', aider: 'Aider', opencode: 'opencode', goose: 'Goose', crush: 'Crush' };
 const agentName = (a) => (a && (a.agentName || AGENT_NAMES[a.agent])) || AGENT_NAME;
 
 /* Timer | Stopwatch switch at the top of both panels (the stopwatch lives inside Timer). */
@@ -524,7 +525,8 @@ const views = {
     const others = list.filter((x) => x !== a).map((x) => `
       <button class="srcrow" data-act="focusAgent" data-arg="${esc(x.id)}">${x.status === 'done' ? check(16) : spinner(16)}
         <span class="f13 sp ell" style="font-weight:600">${esc(agentName(x) + (x.project ? ' · ' + x.project : ''))}</span><span class="d f12 ell" style="max-width:220px">${esc(x.status === 'done' ? 'finished' : x.step)}</span></button>`).join('');
-    const script = a.agent === 'custom'; // a script or program posting by itself: its own steps, no Read/Edit/Test
+    // A script posting by itself, or an agent noticed from its running program: no Read/Edit/Test stages to show.
+    const script = a.agent === 'custom' || a.detected;
     const nSteps = script ? a.feed.length : a.steps;
     const sub = err ? 'Stopped with an error' : done ? `Finished${nSteps ? ` · ${nSteps} step${nSteps === 1 ? '' : 's'}` : ''}`
       : script ? `Running${nSteps ? ` · step ${nSteps}` : ''}` : `${STAGE_TEXT[stage]} · stage ${stage + 1} of 4${a.steps ? ` · step ${a.steps}` : ''}`;
@@ -1192,8 +1194,40 @@ const LANG = { js: 'JS', mjs: 'JS', cjs: 'JS', ts: 'TS', tsx: 'TSX', jsx: 'JSX',
 const fmtClock = (ms) => { const s = Math.max(0, Math.floor(ms / 1000)), h = Math.floor(s / 3600), m = Math.floor(s / 60) % 60; return h ? `${h}:${pad2(m)}:${pad2(s % 60)}` : `${m}:${pad2(s % 60)}`; };
 
 /* ---------------- agent updates ---------------- */
+/* Agents noticed from their running programs (electron/media.ps1 watches for known agents and whether they're busy):
+ * no hooks, no setup, any of the listed agents. When hooks for the same agent report, they have more detail (steps,
+ * the code change, Allow / Deny), so the noticed entry steps aside for them. */
+const procSeen = new Map(); // detected key -> working
+function hookReporting(agent) {
+  const now = Date.now();
+  return [...state.agents.values()].some((a) => a.agent === agent && !String(a.id).startsWith('proc:')
+    && (a.status === 'working' || a.status === 'waiting') && now - a.updated < 90000);
+}
+function onAgentProcs(list) {
+  if (prefs.agentDetect === false || prefs.agents === false) list = [];
+  const keys = new Set(list.map((p) => p.key));
+  for (const k of [...procSeen.keys()]) if (!keys.has(k)) { procSeen.delete(k); onAgentEvent({ session_id: k, hook_event_name: 'SessionEnd' }); }
+  for (const p of list) {
+    const was = procSeen.get(p.key);
+    procSeen.set(p.key, !!p.working);
+    if (p.working && !was) {
+      if (hookReporting(p.agent)) continue;
+      onAgentEvent({ session_id: p.key, agent: p.agent, agent_name: AGENT_NAMES[p.agent] ? undefined : p.name, hook_event_name: 'UserPromptSubmit', prompt: '' });
+      const a = state.agents.get(p.key);
+      if (a) { a.detected = true; a.startedAt = p.since || Date.now(); a.step = 'Working'; refreshResting(); }
+    } else if (!p.working && was) {
+      const a = state.agents.get(p.key);
+      if (a && a.status === 'working') onAgentEvent({ session_id: p.key, hook_event_name: 'Stop' });
+    }
+  }
+}
+
 function onAgentEvent(ev, fromPermission) {
   if (!ev || !ev.session_id) return;
+  // A hook is reporting this agent in detail: drop the plain "noticed" entry for it.
+  if (ev.agent && !String(ev.session_id).startsWith('proc:')) {
+    for (const [k, x] of state.agents) if (String(k).startsWith('proc:') && x.agent === ev.agent) state.agents.delete(k);
+  }
   const now = Date.now();
   let a = state.agents.get(ev.session_id);
   if (!a) {
@@ -1464,6 +1498,13 @@ if (host) {
         break;
       case 'agent':
         onAgentEvent(m.event);
+        break;
+      case 'agent-procs':
+        onAgentProcs(m.list || []);
+        break;
+      case 'resume': // back from sleep or the lock screen: redraw, and start listening to the audio again
+        try { stopViz(); } catch { /* not running */ }
+        render(baseView());
         break;
       case 'agent-permission':
         onAgentEvent(m.event, true);

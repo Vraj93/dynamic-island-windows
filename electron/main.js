@@ -97,7 +97,7 @@ function createWindow() {
   win.loadFile(path.join(__dirname, '..', 'ui', 'index.html'));
   win.once('ready-to-show', () => win.showInactive());
   win.webContents.on('console-message', (_e, level, message) => { if (level >= 2) log('ui: ' + message); });
-  win.webContents.on('render-process-gone', (_e, d) => log('renderer gone: ' + d.reason));
+  win.webContents.on('render-process-gone', (_e, d) => { log('renderer gone: ' + d.reason); setTimeout(() => win && !win.isDestroyed() && win.webContents.reload(), 1000); });
 }
 
 function send(msg) {
@@ -113,6 +113,7 @@ ipcMain.on('ui', (_e, msg) => {
       if (lastFullscreen) send(lastFullscreen);
       send(calendar.snapshot());
       if (lastPrivacy) send(lastPrivacy);
+      if (lastAgentProcs) send(lastAgentProcs);
       if (clipHistory.length) send({ type: 'clip', items: clipHistory });
       send({ type: 'mic-key-active', key: micKeyOn });
       // Development only: ISLAND_TEST_SCRIPT=<file.js> runs that script in the UI (used to test drag-and-drop screens).
@@ -214,6 +215,7 @@ function startMedia() {
         else if (m.type === 'fullscreen') { lastFullscreen = m; send(m); log('fullscreen ' + m.on); }
         else if (m.type === 'sys') send(m);
         else if (m.type === 'privacy') { lastPrivacy = m; send(m); }
+        else if (m.type === 'agent-procs') { lastAgentProcs = m; send(m); }
         else if (m.type === 'clip-private') clipPrivate = { at: Date.now(), private: !!m.private };
         else if (m.type === 'media-error') log('media: ' + m.message);
       } catch { log('media (bad line): ' + line.slice(0, 120)); }
@@ -230,7 +232,7 @@ function startMedia() {
   });
 }
 
-let lastPrivacy = null;
+let lastPrivacy = null, lastAgentProcs = null;
 function mediaCommand(cmd) {
   if (!media || !/^(toggle|next|prev|seek [\d.]+|select [\w.!\-]+|volkeys (on|off)|mic (toggle|mute|unmute))$/.test(String(cmd))) return;
   media.stdin.write(cmd + '\n');
@@ -370,7 +372,8 @@ const DEFAULT_SETTINGS = {
   lyrics: true,           // lyrics button in the player (looks up lyrics only when you open it)
   findCovers: true,       // look up a cover online when the app sends none (title + artist to iTunes / Deezer)
   musixmatchKey: '',      // optional: your own Musixmatch API key, an extra lyrics source
-  agents: true,           // Claude Code status and approvals
+  agents: true,           // AI agents in the island
+  agentDetect: true,      // notice running agents by themselves (no hooks needed)
   volumeKeys: true,       // island handles the volume keys (hides Windows' pop-up)
   hudVolume: true, hudBrightness: true, hudCaps: true, hudBattery: true,
   clipboard: true,        // clipboard history
@@ -646,6 +649,25 @@ ipcMain.handle('cal', (_e, req) => calendar.handle(req));
 ipcMain.handle('cover', (_e, song) => (settings.findCovers === false || !song ? null : covers.find(song)));
 ipcMain.handle('lyrics', (_e, song) => (settings.lyrics === false || !song ? { status: 'off' } : lyrics.find(song, { musixmatchKey: settings.musixmatchKey })));
 
+/* Bring the island back to a working state, after sleep, unlocking the PC or a crash. */
+let recovering = false;
+async function recover() {
+  if (recovering || !win || win.isDestroyed()) return;
+  recovering = true;
+  try {
+    win.setBounds(windowBounds());
+    win.setAlwaysOnTop(true, 'screen-saver');
+    mouseCaptured = false; win.setIgnoreMouseEvents(true, { forward: true });
+    if (!win.isVisible()) win.showInactive();
+    if (!media) { mediaRestarts = 0; startMedia(); }   // Windows may have closed the helper during sleep
+    // Is the island's screen still answering? If not within 3 s, reload it.
+    const alive = await Promise.race([win.webContents.executeJavaScript('1').then(() => true).catch(() => false), new Promise((r) => setTimeout(() => r(false), 3000))]);
+    if (!alive) { log('island screen not answering: reloading'); win.webContents.reload(); }
+    else { win.webContents.invalidate(); send({ type: 'resume' }); }
+  } catch (e) { log('recover: ' + e.message); }
+  recovering = false;
+}
+
 function createTray() {
   // tray.ico holds a separately drawn image for each size Windows uses (made by scripts/make-icons.ps1).
   tray = new Tray(nativeImage.createFromPath(path.join(__dirname, '..', 'assets', 'tray.ico')));
@@ -685,9 +707,14 @@ if (!app.requestSingleInstanceLock()) {
       send(snap);
       if (settingsWin && !settingsWin.isDestroyed()) settingsWin.webContents.send('host', snap);
     } });
-    powerMonitor.on('resume', () => calendar.nudge());
-    powerMonitor.on('unlock-screen', () => calendar.nudge());
-    (function pollLoop() { poll(); setTimeout(pollLoop, pollNear ? 16 : 50); })();
+    powerMonitor.on('resume', () => { log('resumed from sleep'); calendar.nudge(); setTimeout(recover, 1500); });
+    powerMonitor.on('unlock-screen', () => { log('screen unlocked'); calendar.nudge(); setTimeout(recover, 800); });
+    // A crashed screen or graphics process would leave a frozen or blank island: reload it.
+    app.on('child-process-gone', (_e, d) => { log(`child process gone: ${d.type} ${d.reason}`); if (d.type === 'GPU') setTimeout(recover, 1000); });
+    (function pollLoop() {
+      try { poll(); } catch (e) { pollNear = false; } // e.g. while the screen is locked; try again shortly
+      setTimeout(pollLoop, pollNear ? 16 : 50);
+    })();
     setInterval(pollClipboard, 800);
     // Re-pin to the top-centre if screens or scaling change.
     const replace = () => win && win.setBounds(windowBounds());

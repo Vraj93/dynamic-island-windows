@@ -80,6 +80,7 @@
       "customManifestPath": "build/appxmanifest.xml",
       "minVersion": "10.0.17763.0",
       "maxVersionTested": "10.0.26100.0"
-    }
+    },
+    "afterPack": "build/after-pack.js"
   }
 }

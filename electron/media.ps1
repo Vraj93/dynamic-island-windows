@@ -423,6 +423,87 @@ $consent = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\CapabilityAccessMana
 function Users-Of([string]$cap) {
     foreach ($u in [IslandSys]::UsersOf($cap)) { $a, $ms = $u -split '\|', 2; @{ app = $a; since = [long]$ms } }
 }
+# AI agents, noticed without any setup: which known agent programs are running, and whether each one is busy.
+# An agent at work keeps using the processor (its spinner, the tools it runs, the answer streaming in); waiting for
+# you, it goes quiet. Its tools (shell commands, builds) count too, because they're its child processes.
+#   rules: agent id, display name, process name, and (optional) text its command line must / must not contain
+$agentRules = @(
+    @('claude-code', 'Claude Code', 'claude', 'claude-code|@anthropic-ai', 'WindowsApps\\Claude_'),   # not the Claude chat app
+    @('claude-code', 'Claude Code', 'node', '@anthropic-ai[\\/]claude-code', ''),
+    @('codex', 'Codex', 'codex', '', 'sandbox|--type='),
+    @('codex', 'Codex', 'node', '@openai[\\/]codex', ''),
+    @('gemini', 'Gemini CLI', 'gemini', '', ''),
+    @('gemini', 'Gemini CLI', 'node', '@google[\\/]gemini-cli', ''),
+    @('copilot', 'Copilot CLI', 'copilot', '', '--type='),
+    @('copilot', 'Copilot CLI', 'node', '@github[\\/]copilot', ''),
+    @('cursor', 'Cursor Agent', 'cursor-agent', '', ''),
+    @('qwen', 'Qwen Code', 'node', '@qwen-code', ''),
+    @('amp', 'Amp', 'node', '@sourcegraph[\\/]amp', ''),
+    @('aider', 'Aider', 'aider', '', ''),
+    @('aider', 'Aider', 'python', '[\\/]aider|-m aider', ''),
+    @('opencode', 'opencode', 'opencode', '', ''),
+    @('goose', 'Goose', 'goose', '', ''),
+    @('crush', 'Crush', 'crush', '', '')
+)
+$agentProcs = @{}      # pid -> @{ id; name; kids; cpu; busySince; quietSince; working }
+$agentLast = ''
+$agentScanAt = [DateTime]::MinValue
+function Scan-Agents {
+    # Finding agents needs command lines (slower), so it runs every 6 s; measuring them runs every 2 s.
+    $all = @(Get-CimInstance Win32_Process -Property ProcessId, ParentProcessId, Name, CommandLine -ErrorAction SilentlyContinue)
+    $byParent = @{}
+    foreach ($p in $all) { if (-not $byParent.ContainsKey([int]$p.ParentProcessId)) { $byParent[[int]$p.ParentProcessId] = @() }; $byParent[[int]$p.ParentProcessId] += [int]$p.ProcessId }
+    $found = @{}
+    foreach ($p in $all) {
+        $n = ($p.Name -replace '\.exe$', '').ToLower(); $cmd = "$($p.CommandLine)"
+        foreach ($r in $script:agentRules) {
+            if ($n -ne $r[2]) { continue }
+            if ($r[3] -and $cmd -notmatch $r[3]) { continue }
+            if ($r[4] -and $cmd -match $r[4]) { continue }
+            # descendants: the commands it runs for you
+            $kids = @(); $stack = @([int]$p.ProcessId)
+            while ($stack.Count) { $c = $stack[0]; $stack = @($stack | Select-Object -Skip 1); foreach ($k in @($byParent[$c])) { if ($k -and $kids.Count -lt 60) { $kids += $k; $stack += $k } } }
+            $found[[int]$p.ProcessId] = @{ id = $r[0]; name = $r[1]; kids = $kids }
+            break
+        }
+    }
+    # A wrapper and the agent it starts (node running claude) are one agent: keep the outermost.
+    foreach ($pid2 in @($found.Keys)) { foreach ($other in @($found.Keys)) { if ($other -ne $pid2 -and $found.ContainsKey($other) -and $found[$other].kids -contains $pid2) { $found.Remove($pid2); break } } }
+    foreach ($pid2 in @($script:agentProcs.Keys)) { if (-not $found.ContainsKey($pid2)) { $script:agentProcs.Remove($pid2) } }
+    foreach ($pid2 in $found.Keys) {
+        if ($script:agentProcs.ContainsKey($pid2)) { $script:agentProcs[$pid2].kids = $found[$pid2].kids }
+        else { $script:agentProcs[$pid2] = @{ id = $found[$pid2].id; name = $found[$pid2].name; kids = $found[$pid2].kids; cpu = -1; working = $false; busySince = 0; quietSince = 0; startedAt = 0 } }
+    }
+}
+function CpuMs([int[]]$ids) {
+    $t = 0.0
+    foreach ($i in $ids) { try { $t += [System.Diagnostics.Process]::GetProcessById($i).TotalProcessorTime.TotalMilliseconds } catch { } }
+    $t
+}
+function Publish-Agents {
+    $now = [DateTime]::UtcNow
+    if (($now - $script:agentScanAt).TotalSeconds -ge 6) { $script:agentScanAt = $now; Scan-Agents }
+    $ms = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
+    $list = @()
+    foreach ($pid2 in @($script:agentProcs.Keys)) {
+        $a = $script:agentProcs[$pid2]
+        $cpu = CpuMs (@($pid2) + @($a.kids))
+        if ($a.cpu -ge 0) {
+            # Busy: ~2% of a core over the last 2 s, or less while it's running a command for you.
+            $d = $cpu - $a.cpu
+            $busy = ($d -gt 40) -or ((@($a.kids).Count -gt 0) -and ($d -gt 15))
+            if ($busy) { $a.quietSince = 0; if (-not $a.working) { if (-not $a.busySince) { $a.busySince = $ms } elseif ($ms - $a.busySince -ge 3000) { $a.working = $true; $a.startedAt = $a.busySince } } }
+            else { $a.busySince = 0; if ($a.working) { if (-not $a.quietSince) { $a.quietSince = $ms } elseif ($ms - $a.quietSince -ge 12000) { $a.working = $false } } }
+        }
+        $a.cpu = $cpu
+        $list += @{ key = "proc:$pid2"; agent = $a.id; name = $a.name; working = [bool]$a.working; since = [long]$a.startedAt }
+    }
+    $key = ($list | ForEach-Object { "$($_.key)=$($_.working)" }) -join ','
+    if ($key -eq $script:agentLast) { return }
+    $script:agentLast = $key
+    Out-Json @{ type = 'agent-procs'; list = @($list) }
+}
+
 function Publish-Privacy {
     $mic = @(Users-Of 'microphone'); $cam = @(Users-Of 'webcam')
     $scr = @(Users-Of 'graphicsCaptureProgrammatic') + @(Users-Of 'graphicsCaptureWithoutBorder')
@@ -459,6 +540,7 @@ while ($true) {
             Publish
         }
         if (($tickCount % 16) -eq 1) { Publish-Privacy }   # about every 2 s
+        if (($tickCount % 16) -eq 9) { try { Publish-Agents } catch { } }   # about every 2 s, between the others
         if (($tickCount % 2500) -eq 0) { [GC]::Collect() }   # every ~5 min, return memory PowerShell no longer needs
     } catch {
         Out-Json @{ type = 'media-error'; message = "$($_.Exception.Message)" }
