@@ -374,6 +374,7 @@ const DEFAULT_SETTINGS = {
   musixmatchKey: '',      // optional: your own Musixmatch API key, an extra lyrics source
   agents: true,           // AI agents in the island
   agentDetect: true,      // notice running agents by themselves (no hooks needed)
+  autoUpdate: true,       // download new versions from GitHub by itself (installer version; the Store updates its own)
   volumeKeys: true,       // island handles the volume keys (hides Windows' pop-up)
   hudVolume: true, hudBrightness: true, hudCaps: true, hudBattery: true,
   clipboard: true,        // clipboard history
@@ -649,6 +650,46 @@ ipcMain.handle('cal', (_e, req) => calendar.handle(req));
 ipcMain.handle('cover', (_e, song) => (settings.findCovers === false || !song ? null : covers.find(song)));
 ipcMain.handle('lyrics', (_e, song) => (settings.lyrics === false || !song ? { status: 'off' } : lyrics.find(song, { musixmatchKey: settings.musixmatchKey })));
 
+/* ---------- updates: the installer version updates itself from GitHub releases ----------
+ * Checks shortly after starting and every 6 hours, downloads a new version quietly, then the island offers
+ * "Restart to update" (or it installs the next time the app closes). The Store version is updated by the Store. */
+let updater = null;
+let updateState = { status: 'idle' };   // idle | checking | downloading | ready | none | error
+const updatesSupported = () => app.isPackaged && !process.windowsStore;
+function setUpdateState(st) {
+  updateState = st;
+  const msg = { type: 'update', ...st };
+  send(msg);
+  if (settingsWin && !settingsWin.isDestroyed()) settingsWin.webContents.send('host', msg);
+}
+function checkForUpdates() {
+  if (!updater || settings.autoUpdate === false) return;
+  updater.checkForUpdates().catch((e) => log('update check: ' + e.message));
+}
+function startUpdates() {
+  if (!updatesSupported()) return;
+  try { updater = require('electron-updater').autoUpdater; } catch (e) { log('updater: ' + e.message); return; }
+  updater.autoDownload = true;
+  updater.autoInstallOnAppQuit = true;
+  updater.logger = { info: (m) => log('update: ' + m), warn: (m) => log('update: ' + m), error: (m) => log('update error: ' + m), debug: () => {} };
+  updater.on('checking-for-update', () => setUpdateState({ status: 'checking' }));
+  updater.on('update-available', (i) => setUpdateState({ status: 'downloading', version: i.version, percent: 0 }));
+  updater.on('update-not-available', () => setUpdateState({ status: 'none', checkedAt: Date.now() }));
+  updater.on('download-progress', (p) => setUpdateState({ status: 'downloading', version: updateState.version, percent: Math.round(p.percent) }));
+  updater.on('update-downloaded', (i) => setUpdateState({ status: 'ready', version: i.version }));
+  updater.on('error', (e) => setUpdateState({ status: 'error', error: String((e && e.message) || e).slice(0, 200) }));
+  setTimeout(checkForUpdates, 30000);
+  setInterval(checkForUpdates, 6 * 3600e3);
+}
+ipcMain.handle('update-state', () => ({ ...updateState, supported: updatesSupported(), store: !!process.windowsStore, version: app.getVersion() }));
+ipcMain.handle('update-check', () => { checkForUpdates(); return true; });
+ipcMain.handle('update-install', () => {
+  if (!updater || updateState.status !== 'ready') return false;
+  app.isQuitting = true;
+  setImmediate(() => updater.quitAndInstall(true, true)); // quietly, then start the new version
+  return true;
+});
+
 /* Bring the island back to a working state, after sleep, unlocking the PC or a crash. */
 let recovering = false;
 async function recover() {
@@ -703,6 +744,7 @@ if (!app.requestSingleInstanceLock()) {
     applySettings(settings);
     startAgentServer();
     setTimeout(refreshAgentHooks, 4000);
+    startUpdates();
     calendar.start({ log, getSettings: () => settings, onChange: (snap) => {
       send(snap);
       if (settingsWin && !settingsWin.isDestroyed()) settingsWin.webContents.send('host', snap);

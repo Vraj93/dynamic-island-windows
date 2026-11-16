@@ -38,7 +38,10 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/*.exe
+          files: |
+            dist/*.exe
+            dist/*.exe.blockmap
+            dist/latest.yml
           generate_release_notes: true
           body: |
             Windows installer for Dynamic Isle. Download `Dynamic-Isle-Setup-*.exe` and run it.

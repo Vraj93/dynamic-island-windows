@@ -202,6 +202,9 @@ const SECTIONS = {
     </div>`,
 
   about: () => `<h1>About</h1><p class="lead">Dynamic Isle${info.version ? ' · version ' + esc(info.version) : ''}.</p>
+    <div class="sec">Updates</div>
+    <div class="card">${updateRows()}</div>
+    <div class="sec">This app</div>
     <div class="card">
       <div class="item"><div class="t"><div class="n">License</div><div class="s">MIT: free to use, change and share.</div></div><button class="btn" data-open="repo">GitHub page</button></div>
       <div class="item"><div class="t"><div class="n">Your data</div><div class="s">Settings, alarms, reminders, your note and the shelf list are stored on this PC only.</div></div><button class="btn" data-open="data">Open folder</button></div>
@@ -242,6 +245,8 @@ document.addEventListener('click', async (e) => {
   }
   if (e.target.closest('[data-mxm]')) { host.send({ type: 'set-setting', key: 'musixmatchKey', value: document.getElementById('mxmKey').value.trim() }); return; }
   if (e.target.closest('[data-mxm-clear]')) { host.send({ type: 'set-setting', key: 'musixmatchKey', value: '' }); return; }
+  const up = e.target.closest('[data-update]');
+  if (up && !up.disabled) { up.disabled = true; await host.invoke(up.dataset.update === 'install' ? 'update-install' : 'update-check'); return; }
   const mk = e.target.closest('[data-mickey]');
   if (mk) {
     host.send({ type: 'set-setting', key: 'micKey', value: mk.dataset.mickey });
@@ -306,6 +311,23 @@ document.addEventListener('change', (e) => {
 document.addEventListener('toggle', (e) => { if (e.target.classList && e.target.classList.contains('adv')) advOpen = e.target.open; }, true);
 document.addEventListener('keydown', (e) => { if (e.key === 'Enter' && (e.target.id === 'icsUrl' || e.target.id === 'icsName')) document.querySelector('[data-savelink]').click(); });
 
+// Updates: the installer version updates itself from GitHub; the Store version is updated by the Store.
+let upd = null;
+function updateRows() {
+  const u = upd || {};
+  if (u.store) return '<div class="item"><div class="t"><div class="n">Updated by the Microsoft Store</div><div class="s">New versions install automatically through the Store.</div></div></div>';
+  if (!u.supported) return '<div class="item"><div class="t"><div class="n">Updates</div><div class="s">Running from source: update with git pull.</div></div></div>';
+  const when = (t) => new Date(t).toLocaleString([], { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+  const line = u.status === 'checking' ? 'Checking for updates…'
+    : u.status === 'downloading' ? `Downloading version ${esc(u.version || '')}${u.percent ? ` · ${u.percent}%` : ''}…`
+    : u.status === 'ready' ? `Version ${esc(u.version || '')} is ready. Restart to finish, or it installs the next time the app closes.`
+    : u.status === 'none' ? `You're up to date${u.checkedAt ? ` (checked ${when(u.checkedAt)})` : ''}.`
+    : u.status === 'error' ? `Couldn't check: ${esc(u.error || 'no connection')}`
+    : 'Checks shortly after the app starts and every 6 hours.';
+  return `<div class="item"><div class="t"><div class="n">Version ${esc(info.version || '')}</div><div class="s">${line}</div></div>
+      ${u.status === 'ready' ? '<button class="btn primary" data-update="install">Restart to update</button>' : `<button class="btn" data-update="check" ${u.status === 'checking' || u.status === 'downloading' ? 'disabled' : ''}>Check now</button>`}</div>
+    ${item('autoUpdate', 'Update automatically', 'Download new versions from GitHub in the background. Nothing about you is sent; it only reads the latest release.')}`;
+}
 let micKeyActive = null;
 async function refreshMicKey() { micKeyActive = (await host.invoke('mic-key-ok')) || ''; if (section === 'popups') draw(); }
 let cal = null, calBusy = '', calError = '', linkOpen = false, advOpen = false;
@@ -315,12 +337,14 @@ host.onMessage((m) => {
   if (m.type === 'settings') { S = m.settings; if (!typing()) draw(); }
   else if (m.type === 'calendar') { cal = m; if (section === 'calendar' && !typing()) draw(); }
   else if (m.type === 'section' && SECTIONS[m.section]) { section = m.section; draw(); }
+  else if (m.type === 'update') { upd = { ...(upd || {}), ...m }; if (section === 'about' && !typing()) draw(); }
 });
 (async () => {
   S = await host.invoke('get-settings');
   info = await host.invoke('app-info');
   cal = await host.invoke('cal', { op: 'state' });
   refreshMicKey();
+  upd = await host.invoke('update-state');
   if (!SECTIONS[section]) section = 'general';
   draw();
   refreshClaude();

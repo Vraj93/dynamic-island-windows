@@ -1,7 +1,7 @@
 {
   "name": "dynamic-island",
   "productName": "Dynamic Isle",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "description": "An island at the top of your Windows screen: music, calendar, timers, AI agent status and quick tools.",
   "author": "Vraj93",
   "homepage": "https://github.com/Vraj93/dynamic-island-windows",
@@ -81,6 +81,17 @@
       "minVersion": "10.0.17763.0",
       "maxVersionTested": "10.0.26100.0"
     },
-    "afterPack": "build/after-pack.js"
+    "afterPack": "build/after-pack.js",
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "Vraj93",
+        "repo": "dynamic-island-windows",
+        "releaseType": "release"
+      }
+    ]
+  },
+  "dependencies": {
+    "electron-updater": "^6.8.11"
   }
 }
