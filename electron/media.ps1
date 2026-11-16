@@ -452,10 +452,12 @@ $agentRules = @(
 $agentProcs = @{}      # pid -> @{ id; name; kids; cpu; busySince; quietSince; working }
 $agentLast = ''
 $agentScanAt = [DateTime]::MinValue
+$shellNames = @('bash', 'sh', 'cmd', 'powershell', 'pwsh', 'zsh', 'git')
 function Scan-Agents {
     # Finding agents needs command lines (slower), so it runs every 6 s; measuring them runs every 2 s.
     $all = @(Get-CimInstance Win32_Process -Property ProcessId, ParentProcessId, Name, CommandLine -ErrorAction SilentlyContinue)
-    $byParent = @{}
+    $byParent = @{}; $nameOf = @{}
+    foreach ($p in $all) { $nameOf[[int]$p.ProcessId] = ($p.Name -replace '\.exe$', '').ToLower() }
     foreach ($p in $all) { if (-not $byParent.ContainsKey([int]$p.ParentProcessId)) { $byParent[[int]$p.ParentProcessId] = @() }; $byParent[[int]$p.ParentProcessId] += [int]$p.ProcessId }
     $found = @{}
     foreach ($p in $all) {
@@ -464,9 +466,10 @@ function Scan-Agents {
             if ($n -ne $r[2]) { continue }
             if ($r[3] -and $cmd -notmatch $r[3]) { continue }
             if ($r[4] -and $cmd -match $r[4]) { continue }
-            # descendants: the commands it runs for you
+            # descendants that are commands it runs for you (shells). Long-lived helpers such as its tool (MCP) servers
+            # are left out: they tick over all the time and made an idle agent look busy.
             $kids = @(); $stack = @([int]$p.ProcessId)
-            while ($stack.Count) { $c = $stack[0]; $stack = @($stack | Select-Object -Skip 1); foreach ($k in @($byParent[$c])) { if ($k -and $kids.Count -lt 60) { $kids += $k; $stack += $k } } }
+            while ($stack.Count) { $c = $stack[0]; $stack = @($stack | Select-Object -Skip 1); foreach ($k in @($byParent[$c])) { if ($k -and $kids.Count -lt 60) { $stack += $k; if ($script:shellNames -contains $nameOf[[int]$k]) { $kids += $k } } } }
             $found[[int]$p.ProcessId] = @{ id = $r[0]; name = $r[1]; kids = $kids }
             break
         }

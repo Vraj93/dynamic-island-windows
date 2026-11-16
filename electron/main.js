@@ -214,7 +214,7 @@ function startMedia() {
         else if (m.type === 'fullscreen') { lastFullscreen = m; send(m); log('fullscreen ' + m.on); }
         else if (m.type === 'sys') send(m);
         else if (m.type === 'privacy') { lastPrivacy = m; send(m); }
-        else if (m.type === 'agent-procs') { lastAgentProcs = m; send(m); }
+        else if (m.type === 'agent-procs') { const mm = { ...m, list: (m.list || []).filter((p) => !hookedAgents().has(p.agent)) }; lastAgentProcs = mm; send(mm); }
         else if (m.type === 'clip-private') clipPrivate = { at: Date.now(), private: !!m.private };
         else if (m.type === 'media-error') log('media: ' + m.message);
       } catch { log('media (bad line): ' + line.slice(0, 120)); }
@@ -787,6 +787,16 @@ function agentHooks() {
 }
 /* Connected agents keep working after the app moves or is renamed (an update, the Store version): if an agent's
  * hooks point at a different program than this one, set them up again for this one. */
+// Agents whose hooks report to the island: their own reports are exact, so the process scan leaves them out.
+let hooked = { at: 0, set: new Set() };
+function hookedAgents() {
+  if (Date.now() - hooked.at > 60e3) {
+    const set = new Set();
+    try { for (const [id, x] of Object.entries(agentHooks().status())) if (x.connected) set.add(id); } catch { /* keep none */ }
+    hooked = { at: Date.now(), set };
+  }
+  return hooked.set;
+}
 function refreshAgentHooks() {
   if (!app.isPackaged) return; // when run from source the program is electron.exe; leave hooks alone
   try {
