@@ -339,3 +339,11 @@ button.src:hover{background:rgba(255,255,255,.16)}
 .spin{animation:none}
 .eq i{animation:none}
 body.liveviz .eq:not(.off) i{transition:none}
+/* Compress: quality slider and size box */
+.v .slider{display:flex;align-items:center}
+.v .slider input{-webkit-appearance:none;appearance:none;width:100%;height:6px;border-radius:3px;cursor:pointer;margin:0;
+  background:linear-gradient(90deg,var(--accent,#fff) var(--fill,50%),rgba(255,255,255,.16) var(--fill,50%))}
+.v .slider input::-webkit-slider-thumb{-webkit-appearance:none;width:20px;height:20px;border-radius:50%;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.5)}
+.cmpin{width:110px;height:38px;border-radius:10px;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.07);color:#fff;font:600 16px inherit;padding:0 12px;outline:none}
+.cmpin:focus{border-color:#ff9500}
+.cmpin::-webkit-inner-spin-button{display:none}

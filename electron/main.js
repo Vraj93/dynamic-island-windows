@@ -546,7 +546,7 @@ function runConvert(mode, input, output, format, quality, extra = {}) {
   return new Promise((resolve) => {
     const args = ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', path.join(UNPACKED, 'convert.ps1'),
       '-Mode', mode, '-In', input, '-Out', output, '-Format', format, '-Quality', String(quality || 90),
-      '-MaxSide', String(extra.maxSide || 0), '-Bitrate', String(extra.bitrate || 0)];
+      '-MaxSide', String(extra.maxSide || 0), '-Bitrate', String(extra.bitrate || 0), '-TargetBytes', String(extra.target || 0)];
     const p = spawn('powershell.exe', args, { windowsHide: true });
     let last = null, buf = '';
     p.stdout.setEncoding('utf8');
@@ -606,31 +606,77 @@ ipcMain.handle('convert', async (_e, job) => {
 });
 
 /* ---------- compress: smaller PDFs, images and videos, saved next to the originals as "name (compressed)" ----------
- * Images and video go through the same Windows converter as Convert (resized, lower quality / bitrate). PDFs keep
- * their text and pages; only the pictures inside are shrunk and re-saved as JPEG. */
-const COMPRESS = {
-  small:    { q: 55, img: 1600, pdf: 1200, vid: 1280, rate: 1200e3 },
-  balanced: { q: 72, img: 2400, pdf: 1800, vid: 1920, rate: 2500e3 },
-  high:     { q: 85, img: 3600, pdf: 2600, vid: 1920, rate: 5000e3 },
-};
+ * Two ways to ask: a quality (10-95 %), or a target size ("make it under 500 KB"). Images are re-encoded here
+ * (nativeImage); PDFs keep their text and pages, only the pictures inside shrink; video goes through the Windows
+ * converter at a lower bitrate. For a target size it tries settings until the file fits, keeping the best one. */
+const VIDEO_IN = /\.(mp4|mov|m4v|mkv|avi|wmv|webm|3gp)$/i;
+// what a quality means in practice: JPEG quality and the longest side allowed
+const sideFor = (q, kind) => (kind === 'pdf' ? (q >= 80 ? 2600 : q >= 55 ? 1800 : q >= 35 ? 1300 : 1000)
+  : q >= 80 ? 4000 : q >= 55 ? 2600 : q >= 35 ? 1800 : 1280);
+const SIZE_STEPS = [4000, 2600, 1800, 1280, 960, 640, 400];
 function compressedName(file, ext) {
-  const dir = path.dirname(file), base = path.basename(file).replace(/.[^.]+$/, '') + ' (compressed)';
+  const dir = path.dirname(file), base = path.basename(file).replace(/\.[^.]+$/, '') + ' (compressed)';
   let out = path.join(dir, `${base}.${ext}`), n = 2;
   while (fs.existsSync(out)) out = path.join(dir, `${base} ${n++}.${ext}`);
   return out;
 }
-async function compressPdf(input, out, lvl) {
+// Highest quality, then largest size, that still fits under target. make(side, q) -> Buffer.
+async function fitUnder(target, make, maxSide) {
+  let best = null, smallest = null;
+  for (const side of [maxSide, ...SIZE_STEPS.filter((s) => s < maxSide)]) {
+    let lo = 15, hi = 92, found = null;
+    const low = await make(side, lo);
+    if (!smallest || low.length < smallest.length) smallest = low;
+    if (low.length > target) continue; // even the lowest quality is too big at this size: go smaller
+    found = low;
+    for (let i = 0; i < 5; i++) {
+      const mid = Math.round((lo + hi) / 2), b = await make(side, mid);
+      if (b.length <= target) { found = b; lo = mid; } else hi = mid;
+    }
+    best = found;
+    break;
+  }
+  return { buf: best || smallest, fits: !!best };
+}
+// An image as nativeImage; formats it can't open (HEIC, WebP, TIFF...) go through the Windows converter first.
+async function loadImage(file) {
+  let img = nativeImage.createFromPath(file);
+  if (!img.isEmpty()) return img;
+  const tmp = path.join(app.getPath('temp'), `isle-cmp-${Date.now()}.png`);
+  const r = await runConvert('image', file, tmp, 'png', 100);
+  if (!r.ok) throw new Error(r.error);
+  img = nativeImage.createFromPath(tmp);
+  try { fs.unlinkSync(tmp); } catch { /* gone */ }
+  if (img.isEmpty()) throw new Error("Couldn't open this image.");
+  return img;
+}
+function imageAt(img, side, q) {
+  const { width: w, height: h } = img.getSize(), long = Math.max(w, h);
+  const k = long > side ? side / long : 1;
+  const im = k < 1 ? img.resize({ width: Math.max(1, Math.round(w * k)), height: Math.max(1, Math.round(h * k)), quality: 'better' }) : img;
+  return im.toJPEG(q);
+}
+async function compressImage(file, job) {
+  const img = await loadImage(file);
+  const long = Math.max(img.getSize().width, img.getSize().height);
+  if (job.target) {
+    const r = await fitUnder(job.target, async (side, q) => imageAt(img, side, q), Math.min(long, 4000));
+    return { buf: r.buf, fits: r.fits };
+  }
+  return { buf: imageAt(img, sideFor(job.quality, 'img'), job.quality), fits: true };
+}
+
+async function compressPdfBytes(input, q, maxSide) {
   const { PDFDocument, PDFName, PDFRawStream, PDFNumber, PDFArray, PDFRef } = require('pdf-lib');
   const zlib = require('zlib');
   let doc;
   try { doc = await PDFDocument.load(fs.readFileSync(input), { updateMetadata: false }); }
-  catch (e) { return { ok: false, error: /encrypt/i.test(e.message) ? 'This PDF is password-protected.' : "Couldn't read this PDF." }; }
+  catch (e) { throw new Error(/encrypt/i.test(e.message) ? 'This PDF is password-protected.' : "Couldn't read this PDF."); }
   const N = (k) => PDFName.of(k);
   const objs = doc.context.enumerateIndirectObjects();
   // soft masks must stay greyscale and untouched
   const masks = new Set();
   for (const [, o] of objs) if (o instanceof PDFRawStream) { const m = o.dict.get(N('SMask')); if (m instanceof PDFRef) masks.add(m.toString()); }
-  let changed = 0;
   for (const [ref, o] of objs) {
     if (!(o instanceof PDFRawStream) || masks.has(ref.toString())) continue;
     const d = o.dict;
@@ -661,48 +707,68 @@ async function compressPdf(input, out, lvl) {
     if (!img || img.isEmpty()) continue;
     const long = Math.max(w, h);
     let tw = w, th = h;
-    if (long > lvl.pdf) { const k = lvl.pdf / long; tw = Math.max(1, Math.round(w * k)); th = Math.max(1, Math.round(h * k)); img = img.resize({ width: tw, height: th, quality: 'better' }); }
-    const jpg = img.toJPEG(lvl.q);
-    if (jpg.length >= o.contents.length * 0.9) continue;
+    if (long > maxSide) { const k = maxSide / long; tw = Math.max(1, Math.round(w * k)); th = Math.max(1, Math.round(h * k)); img = img.resize({ width: tw, height: th, quality: 'better' }); }
+    const jpg = img.toJPEG(q);
+    if (jpg.length >= o.contents.length * 0.95) continue;
     const nd = d.clone(doc.context);
     nd.set(N('Filter'), N('DCTDecode')); nd.delete(N('DecodeParms'));
     nd.set(N('Width'), PDFNumber.of(tw)); nd.set(N('Height'), PDFNumber.of(th));
     nd.set(N('ColorSpace'), N('DeviceRGB')); nd.set(N('BitsPerComponent'), PDFNumber.of(8));
     doc.context.assign(ref, PDFRawStream.of(nd, jpg));
-    changed++;
   }
-  const bytes = await doc.save({ useObjectStreams: true });
-  fs.writeFileSync(out, bytes);
-  return { ok: true, out, images: changed };
+  return Buffer.from(await doc.save({ useObjectStreams: true }));
 }
-ipcMain.handle('compress', async (_e, job) => {
-  const files = (job && Array.isArray(job.files) ? job.files : []).filter((f) => typeof f === 'string' && fs.existsSync(f));
-  const lvl = COMPRESS[job && job.level] || COMPRESS.balanced;
+async function compressPdf(file, job) {
+  if (job.target) return fitUnder(job.target, (side, q) => compressPdfBytes(file, q, side), 2600);
+  return { buf: await compressPdfBytes(file, job.quality, sideFor(job.quality, 'pdf')), fits: true };
+}
+
+ipcMain.handle('file-sizes', (_e, files) => (Array.isArray(files) ? files : []).map((f) => { try { return fs.statSync(f).size; } catch { return 0; } }));
+
+ipcMain.handle('compress', async (_e, raw) => {
+  const files = (raw && Array.isArray(raw.files) ? raw.files : []).filter((f) => typeof f === 'string' && fs.existsSync(f));
+  const job = {
+    quality: Math.max(10, Math.min(95, Math.round(Number(raw && raw.quality) || 70))),
+    target: raw && raw.target > 0 ? Math.round(raw.target) : 0, // bytes per file
+  };
   const results = [];
   for (let i = 0; i < files.length; i++) {
     const f = files[i];
     send({ type: 'compress-progress', index: i, total: files.length, state: 'working' });
+    const before = fs.statSync(f).size;
     let r;
     try {
-      if (/.pdf$/i.test(f)) r = await compressPdf(f, compressedName(f, 'pdf'), lvl);
-      else if (IMAGE_IN.test(f)) r = await runConvert('image', f, compressedName(f, 'jpg'), 'jpg', lvl.q, { maxSide: lvl.img });
-      else if (/.(mp4|mov|m4v|mkv|avi|wmv|webm|3gp)$/i.test(f)) r = await runConvert('media', f, compressedName(f, 'mp4'), 'mp4', 90, { maxSide: lvl.vid, bitrate: lvl.rate });
-      else r = { ok: false, error: 'Only PDFs, images and videos can be compressed.' };
+      if (job.target && before <= job.target) r = { ok: false, error: `Already under ${fmtBytes(job.target)}.` };
+      else if (/\.pdf$/i.test(f) || IMAGE_IN.test(f)) {
+        const pdf = /\.pdf$/i.test(f);
+        const { buf, fits } = pdf ? await compressPdf(f, job) : await compressImage(f, job);
+        if (!buf || buf.length >= before) r = { ok: false, error: 'Already as small as it gets.' };
+        else {
+          const out = compressedName(f, pdf ? 'pdf' : 'jpg');
+          fs.writeFileSync(out, buf);
+          r = { ok: true, out, note: fits ? '' : `Couldn't reach ${fmtBytes(job.target)}; this is the smallest it goes.` };
+        }
+      } else if (VIDEO_IN.test(f)) {
+        const q = job.quality;
+        const rate = job.target ? 0 : Math.round(400e3 + Math.pow(q / 95, 2) * 5.6e6);
+        r = await runConvert('media', f, compressedName(f, 'mp4'), 'mp4', 90, { maxSide: q >= 55 || job.target ? 1920 : 1280, bitrate: rate || 1, target: job.target });
+      } else r = { ok: false, error: 'Only PDFs, images and videos can be compressed.' };
     } catch (e) { r = { ok: false, error: e.message }; }
     r.input = f;
     if (r.ok) {
-      r.before = fs.statSync(f).size;
+      r.before = before;
       r.after = fs.existsSync(r.out) ? fs.statSync(r.out).size : 0;
       if (!r.after || r.after >= r.before) { // nothing gained: don't leave a bigger copy behind
         try { fs.unlinkSync(r.out); } catch { /* gone */ }
-        r = { ok: false, input: f, error: 'Already as small as it gets at this setting.' };
-      }
+        r = { ok: false, input: f, error: 'Already as small as it gets.' };
+      } else if (job.target && r.after > job.target * 1.08 && !r.note) r.note = `Came out at ${fmtBytes(r.after)}; video sizes are approximate.`;
     }
     results.push(r);
     send({ type: 'compress-progress', index: i, total: files.length, state: r.ok ? 'done' : 'failed' });
   }
   return results;
 });
+const fmtBytes = (b) => (b >= 1e6 ? `${+(b / 1e6).toFixed(1)} MB` : `${Math.round(b / 1e3)} KB`);
 
 ipcMain.handle('pick-files', async (_e, why) => {
   const r = await dialog.showOpenDialog({ properties: ['openFile', 'multiSelections'], title: why === 'compress' ? 'Choose files to compress' : 'Choose files to convert' });

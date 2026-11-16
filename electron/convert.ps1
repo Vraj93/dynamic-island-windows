@@ -9,7 +9,8 @@ param(
     [Parameter(Mandatory)] [string]$Format,
     [int]$Quality = 90,
     [int]$MaxSide = 0,      # shrink so the longer side is at most this many pixels (0 = keep the size)
-    [int]$Bitrate = 0       # video: target bits per second (0 = the profile's own); used by Compress
+    [int]$Bitrate = 0,      # video: target bits per second (0 = the profile's own); used by Compress
+    [long]$TargetBytes = 0  # video: aim for about this file size instead (works out the bitrate from the length)
 )
 $ErrorActionPreference = 'Stop'
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
@@ -58,6 +59,7 @@ try {
     Add-Type -AssemblyName System.Runtime.WindowsRuntime
     $null = [Windows.Storage.StorageFile, Windows.Storage, ContentType = WindowsRuntime]
     $null = [Windows.Storage.StorageFolder, Windows.Storage, ContentType = WindowsRuntime]
+    $null = [Windows.Storage.FileProperties.VideoProperties, Windows.Storage, ContentType = WindowsRuntime]
     $null = [Windows.Media.Transcoding.MediaTranscoder, Windows.Media.Transcoding, ContentType = WindowsRuntime]
     $null = [Windows.Media.MediaProperties.MediaEncodingProfile, Windows.Media.MediaProperties, ContentType = WindowsRuntime]
     $ext = [System.WindowsRuntimeSystemExtensions].GetMethods()
@@ -87,8 +89,14 @@ try {
             $profile.Video.Width = [uint32]($w - $w % 2); $profile.Video.Height = [uint32]($h - $h % 2)
             if ($srcProf.Video.FrameRate.Numerator -gt 0) { $profile.Video.FrameRate.Numerator = $srcProf.Video.FrameRate.Numerator; $profile.Video.FrameRate.Denominator = $srcProf.Video.FrameRate.Denominator }
         }
+        if ($TargetBytes -gt 0) {
+            $vp = Await ($src.Properties.GetVideoPropertiesAsync()) ([Windows.Storage.FileProperties.VideoProperties])
+            $sec = [Math]::Max(1, $vp.Duration.TotalSeconds)
+            # leave room for the sound (128 kbps) and the container
+            $Bitrate = [int][Math]::Max(150000, ($TargetBytes * 8 / $sec) * 0.92 - 128000)
+        }
         # never aim above two-thirds of what the original already uses, or a small video would not shrink
-        if ($srcProf.Video.Bitrate -gt 0) { $Bitrate = [Math]::Min($Bitrate, [int]($srcProf.Video.Bitrate * 0.65)) }
+        if ($srcProf.Video.Bitrate -gt 0 -and $TargetBytes -le 0) { $Bitrate = [Math]::Min($Bitrate, [int]($srcProf.Video.Bitrate * 0.65)) }
         $profile.Video.Bitrate = [uint32]$Bitrate
         if ($profile.Audio) { $profile.Audio.Bitrate = [uint32]128000 }
     }

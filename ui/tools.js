@@ -27,7 +27,7 @@ const T = {
   clip: [],
   shelf: store.get('shelf', []),            // { path, name, icon, size }
   convertFiles: [], convertTo: '', convertProgress: [], convertResults: null,
-  cmp: { files: [], level: 'balanced', progress: [], results: null },
+  cmp: { files: [], sizes: [], mode: 'quality', quality: 70, targetN: 500, targetUnit: 'KB', progress: [], results: null },
   settings: Object.assign({ liveBars: true, volumeKeys: true, clipboard: true, startWithWindows: false, chimes: true }, store.get('settings', {})),
   claudeStatus: '',
   dragging: false,
@@ -493,8 +493,7 @@ document.addEventListener('drop', async (e) => {
   const paths = [...e.dataTransfer.files].map((f) => (host ? host.pathFor(f) : '')).filter(Boolean);
   if (!paths.length) { render(dragReturn || baseView()); return; }
   if (dragSideAt(e.clientX) === 'compress') {
-    T.cmp = { ...T.cmp, files: paths, results: null, progress: [] };
-    render('compress');
+    cmpSetFiles(paths);
   } else if (dragSideAt(e.clientX) === 'convert') {
     T.convertFiles = paths; T.convertResults = null; T.convertTo = ''; T.convertProgress = [];
     render('convert');
@@ -565,10 +564,17 @@ Object.assign(actions, {
 });
 
 /* ---------------- compress ----------------
- * Makes PDFs, images and videos smaller. The copy is saved next to the original as "name (compressed)"; the
- * original is never changed. PDFs keep their text; only the pictures in them shrink. */
+ * Makes PDFs, images and videos smaller, either by a quality you pick or down to a size you type. The copy is
+ * saved next to the original as "name (compressed)"; the original is never changed. */
 const CMP_OK = /^(pdf|jpe?g|png|bmp|gif|tiff?|heic|heif|webp|jxr|mp4|mov|m4v|mkv|avi|wmv|webm|3gp)$/;
-const CMP_LEVELS = [['small', 'Smallest', 'Lower quality'], ['balanced', 'Balanced', 'Recommended'], ['high', 'Best quality', 'A bit smaller']];
+const CMP_ORANGE = '#ff9500';
+const cmpQualityText = (q) => `${q}% · ${q >= 80 ? 'sharp, a bit smaller' : q >= 55 ? 'good balance' : q >= 35 ? 'small, softer' : 'smallest, visibly softer'}`;
+const cmpTargetBytes = () => Math.round((Number(T.cmp.targetN) || 0) * (T.cmp.targetUnit === 'MB' ? 1e6 : 1e3));
+async function cmpSetFiles(files) {
+  T.cmp = { ...T.cmp, files, results: null, progress: [], sizes: [] };
+  render('compress');
+  if (host) { T.cmp.sizes = await host.invoke('file-sizes', files); if (state.view === 'compress') render('compress'); }
+}
 views.compress = () => {
   const c = T.cmp;
   if (c.results) {
@@ -576,40 +582,66 @@ views.compress = () => {
     const saved = ok.reduce((n, r) => n + r.before - r.after, 0);
     return panel(`<div class="row">${ok.length ? check(20) : ''}<span class="f15 sp">${ok.length ? `Saved ${fmtSize(saved)}` : 'Nothing compressed'}</span>
         <button class="x" data-act="cmpClear" aria-label="Close">${I.close}</button></div>
-      ${ok.map((r) => `<div class="row f13"><span class="sp ell">${esc(fileName(r.out))}</span><span class="d f12 tn">${fmtSize(r.before)} → ${fmtSize(r.after)} · −${Math.round((1 - r.after / r.before) * 100)}%</span></div>`).join('')}
+      ${ok.map((r) => `<div class="row f13"><span class="sp ell">${esc(fileName(r.out))}</span><span class="d f12 tn">${fmtSize(r.before)} → <b style="color:#fff">${fmtSize(r.after)}</b> · −${Math.round((1 - r.after / r.before) * 100)}%</span></div>
+        ${r.note ? `<div class="f12" style="color:#ffc37a">${esc(r.note)}</div>` : ''}`).join('')}
       ${bad.map((r) => `<div class="f12" style="color:#ff8a84">${esc(fileName(r.input || ''))}: ${esc(r.error)}</div>`).join('')}
-      ${ok.length ? '<div class="row" style="gap:10px"><button class="btn f" data-act="cmpShelf">Keep on shelf</button><button class="btn f w" data-act="cmpShow">Show in folder</button></div>' : ''}`, 520);
+      ${ok.length ? '<div class="row" style="gap:10px"><button class="btn f" data-act="cmpAgain">Try another setting</button><button class="btn f" data-act="cmpShelf">Keep on shelf</button><button class="btn f w" data-act="cmpShow">Show in folder</button></div>' : '<button class="btn f" data-act="cmpAgain">Try another setting</button>'}`, 560);
   }
   if (c.progress.length) {
     return panel(`<div class="row">${spinner(20)}<span class="f15 sp">Compressing</span><span class="d f12">${c.progress.filter((p) => p.state === 'done' || p.state === 'failed').length} of ${c.progress.length}</span></div>
       ${c.progress.map((p) => `<div class="row f13"><span class="sp ell">${esc(fileName(p.file))}</span>
         ${p.state === 'done' ? check(16) : p.state === 'failed' ? '<span class="d f12">skipped</span>' : p.state === 'working' ? spinner(14) : '<span class="d f12">waiting</span>'}</div>`).join('')}
-      <div class="d f12">Video can take a while. You can keep working; the island shows when it's done.</div>`, 500);
+      <div class="d f12">${c.mode === 'size' ? 'Trying settings until it fits. ' : ''}Video can take a while. You can keep working; the island shows when it's done.</div>`, 520);
   }
   if (!c.files.length) {
     return panel(`${head('Compress')}
       <div class="drop" style="height:120px"><div class="f14" style="font-weight:600">Drop files here</div>
         <button class="btn sm" data-act="cmpPick" style="background:rgba(255,149,0,.18);color:#ffc37a">Choose files</button></div>
-      <div class="d f12">PDFs (text stays sharp; the pictures inside get smaller), photos and images (saved as JPG), and videos (saved as MP4). The originals aren't touched, and nothing leaves your PC.</div>`, 520);
+      <div class="d f12">PDFs (text stays sharp; the pictures inside get smaller), photos and images (saved as JPG), and videos (saved as MP4). Pick a quality, or type the size you need. The originals aren't touched, and nothing leaves your PC.</div>`, 540);
   }
   const usable = c.files.filter((f) => CMP_OK.test(extOf(f)));
+  const total = (c.sizes || []).reduce((n, b) => n + b, 0);
+  const seg = (on, act, arg, label) => `<button class="fmt${on ? ' on' : ''}" data-act="${act}" data-arg="${arg}" style="${on ? `background:${CMP_ORANGE};color:#2a1600` : ''}">${label}</button>`;
+  const control = c.mode === 'size'
+    ? `<div class="row" style="gap:10px">
+        <input id="cmpTarget" class="cmpin" type="number" min="1" step="any" inputmode="decimal" value="${esc(String(c.targetN))}" aria-label="Target size">
+        <div class="fmts" style="grid-template-columns:repeat(2,64px)">${seg(c.targetUnit === 'KB', 'cmpUnit', 'KB', 'KB')}${seg(c.targetUnit === 'MB', 'cmpUnit', 'MB', 'MB')}</div>
+        <span class="d f12 sp">${usable.length > 1 ? 'for each file' : total ? `now ${fmtSize(total)}` : ''}</span></div>
+      <div class="d f12">It tries qualities and sizes until the file fits, and keeps the sharpest one that does. Video lands close to it, not exactly.</div>`
+    : `<div class="row" style="gap:12px"><span class="d f12">Smaller</span>
+        <div class="slider sp"><input type="range" id="cmpQ" min="10" max="95" step="5" value="${c.quality}" aria-label="Quality" style="--fill:${((c.quality - 10) / 85) * 100}%;--accent:${CMP_ORANGE}"></div>
+        <span class="d f12">Sharper</span></div>
+      <div class="f13" id="cmpQText" style="text-align:center">${cmpQualityText(c.quality)}</div>`;
   return panel(`${head('Compress', `<button class="x" data-act="cmpClear" aria-label="Clear files">${I.close}</button>`)}
     <div class="row"><span class="ftp">${esc(extOf(c.files[0]).toUpperCase().slice(0, 4))}</span>
-      <div class="sp"><div class="f15 ell">${esc(fileName(c.files[0]))}</div><div class="d f12">${c.files.length > 1 ? `and ${c.files.length - 1} more` : 'One file'}</div></div></div>
-    ${usable.length ? `<div class="fmts" style="grid-template-columns:repeat(3,minmax(0,1fr))">${CMP_LEVELS.map(([k, n, s]) => `<button class="fmt${c.level === k ? ' on' : ''}" data-act="cmpLevel" data-arg="${k}" style="height:auto;padding:9px 6px;display:flex;flex-direction:column;align-items:center;gap:2px"><span>${n}</span><span class="d f12" style="font-weight:400">${s}</span></button>`).join('')}</div>
-      <button class="btn" data-act="cmpGo" style="width:100%;height:48px;background:#ff9500;color:#2a1600;font-size:15px">Compress ${usable.length} file${usable.length === 1 ? '' : 's'}</button>
+      <div class="sp"><div class="f15 ell">${esc(fileName(c.files[0]))}</div><div class="d f12">${c.files.length > 1 ? `and ${c.files.length - 1} more` : 'One file'}${total ? ` · ${fmtSize(total)}` : ''}</div></div></div>
+    ${usable.length ? `<div class="fmts" style="grid-template-columns:repeat(2,minmax(0,1fr))">${seg(c.mode !== 'size', 'cmpMode', 'quality', 'Pick a quality')}${seg(c.mode === 'size', 'cmpMode', 'size', 'Pick a size')}</div>
+      ${control}
+      <button class="btn" data-act="cmpGo" style="width:100%;height:48px;background:${CMP_ORANGE};color:#2a1600;font-size:15px">Compress ${usable.length} file${usable.length === 1 ? '' : 's'}</button>
       ${usable.length < c.files.length ? `<div class="d f12">${c.files.length - usable.length} file(s) skipped: only PDFs, images and videos.</div>` : ''}`
-      : '<div class="f13" style="color:#ff8a84">Only PDFs, images and videos can be compressed.</div>'}`, 520);
+      : '<div class="f13" style="color:#ff8a84">Only PDFs, images and videos can be compressed.</div>'}`, 560);
 };
+// The slider and the size box update in place (a full redraw would drop the drag or the cursor).
+document.addEventListener('input', (e) => {
+  if (e.target.id === 'cmpQ') {
+    T.cmp.quality = Number(e.target.value);
+    e.target.style.setProperty('--fill', `${((T.cmp.quality - 10) / 85) * 100}%`);
+    const t = document.getElementById('cmpQText'); if (t) t.textContent = cmpQualityText(T.cmp.quality);
+  } else if (e.target.id === 'cmpTarget') T.cmp.targetN = e.target.value;
+});
 Object.assign(actions, {
-  async cmpPick() { if (!host) return; const files = await host.invoke('pick-files', 'compress'); if (files.length) T.cmp = { ...T.cmp, files, results: null, progress: [] }; render('compress'); },
-  cmpLevel(l) { T.cmp.level = l; render('compress'); },
-  cmpClear() { T.cmp = { ...T.cmp, files: [], results: null, progress: [] }; render('compress'); },
+  async cmpPick() { if (!host) return; const files = await host.invoke('pick-files', 'compress'); if (files.length) cmpSetFiles(files); else render('compress'); },
+  cmpMode(m) { T.cmp.mode = m; render('compress'); if (m === 'size') setTimeout(() => { const i = document.getElementById('cmpTarget'); if (i) { i.focus(); i.select(); } }, 30); },
+  cmpUnit(u) { T.cmp.targetUnit = u; render('compress'); },
+  cmpClear() { T.cmp = { ...T.cmp, files: [], results: null, progress: [], sizes: [] }; render('compress'); },
+  cmpAgain() { T.cmp.results = null; render('compress'); },
   async cmpGo() {
     const files = T.cmp.files.filter((f) => CMP_OK.test(extOf(f)));
+    const target = T.cmp.mode === 'size' ? cmpTargetBytes() : 0;
+    if (T.cmp.mode === 'size' && !target) { const i = document.getElementById('cmpTarget'); if (i) i.focus(); return; }
     T.cmp.progress = files.map((f) => ({ file: f, state: 'waiting' }));
     render('compress');
-    const results = host ? await host.invoke('compress', { files, level: T.cmp.level }) : [];
+    const results = host ? await host.invoke('compress', { files, quality: T.cmp.quality, target }) : [];
     T.cmp.progress = []; T.cmp.results = results;
     if (T.settings.chimes) doneChime();
     if (state.view === 'compress') render('compress');

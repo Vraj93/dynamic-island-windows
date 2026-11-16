@@ -1213,7 +1213,7 @@ const procSeen = new Map(); // detected key -> working
 function hookReporting(agent) {
   const now = Date.now();
   return [...state.agents.values()].some((a) => a.agent === agent && !String(a.id).startsWith('proc:')
-    && (a.status === 'working' || a.status === 'waiting') && now - a.updated < 90000);
+    && now - (a.updated || 0) < 10 * 60e3); // reported in the last 10 minutes, even 'finished': its own reports are the truth
 }
 function onAgentProcs(list) {
   if (prefs.agentDetect === false || prefs.agents === false) list = [];
