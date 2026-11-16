@@ -46,7 +46,10 @@ const state = {
 const HUD_MS = 1800;
 // Preferences from the Settings window (kept in sync by tools.js).
 const prefs = { media: true, mediaPeek: true, lyrics: true, findCovers: true, agents: true, agentDetect: true, hideFullscreen: true, chimes: true, hudVolume: true, hudBrightness: true, hudCaps: true, hudBattery: true,
-  tiles: ['calendar', 'timer', 'alarm', 'focus', 'reminder', 'note', 'clipboard', 'shelf', 'convert'] };
+  tiles: ['calendar', 'timer', 'alarm', 'focus', 'reminder', 'note', 'clipboard', 'shelf', 'convert', 'compress'], tileCols: 3 };
+// Tools per row in the sheet (Settings › Utility sheet); the sheet widens with more per row.
+const sheetCols = () => Math.max(2, Math.min(5, Math.round(prefs.tileCols) || 3));
+const SHEET_W = { 2: 540, 3: 720, 4: 900, 5: 1080 };
 const mediaKey = (x) => (x && x.active ? `${x.source}|${x.title}|${x.artist}` : '');
 const DONE_SHOW_MS = 90 * 1000; // a finished agent stays in the island this long
 
@@ -60,6 +63,7 @@ const I = {
   note: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4h10l4 4v12H5z"/><path d="M9 12h6M9 16h4"/></svg>',
   clip: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="5.5" y="4.5" width="13" height="16" rx="2.5"/><path d="M9 4.5V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v.5M9 11h6M9 15h4"/></svg>',
   shelf: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M3.5 13.5 6 5.5h12l2.5 8v5a1.5 1.5 0 0 1-1.5 1.5H5a1.5 1.5 0 0 1-1.5-1.5z"/><path d="M3.5 13.5H8l1.5 2.5h5l1.5-2.5h4.5"/></svg>',
+  compress: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3v5H3M16 3v5h5M8 21v-5H3M16 21v-5h5"/></svg>',
   convert: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h13l-3.5-3.5M20 16H7l3.5 3.5"/></svg>',
   back: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>',
   minus: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"><path d="M6 12h12"/></svg>',
@@ -88,6 +92,7 @@ const TILES = [
   { id: 'clipboard', name: 'Clipboard', sub: 'Coming soon', icon: I.clip, color: '100,210,255' },
   { id: 'shelf', name: 'Shelf', sub: 'Coming soon', icon: I.shelf, color: '48,209,88' },
   { id: 'convert', name: 'Convert', sub: 'Coming soon', icon: I.convert, color: '64,200,224' },
+  { id: 'compress', name: 'Compress', sub: 'Coming soon', icon: I.compress, color: '255,149,0' },
 ];
 
 /* ---------------- helpers ---------------- */
@@ -341,13 +346,13 @@ const views = {
       </button>`;
     }).join('');
     return {
-      html: `<div class="v sheet">
+      html: `<div class="v sheet" style="width:${SHEET_W[sheetCols()]}px">
         <div class="row" style="padding:0 4px">
           <div class="sp"><div class="big" style="font-size:34px" data-bind="clock">${clockText()}</div><div class="m f13" style="margin-top:6px">${date}</div></div>
           ${batt}
           <button class="x" data-act="openSettings" aria-label="Settings" title="Settings" style="margin-left:6px">${I.gear}</button>
         </div>
-        ${shown.length ? `<div class="grid" style="grid-template-columns:repeat(${Math.min(3, shown.length)},minmax(0,1fr))">${tiles}</div>` : ''}
+        ${shown.length ? `<div class="grid" style="grid-template-columns:repeat(${Math.min(sheetCols(), shown.length)},minmax(0,1fr))">${tiles}</div>` : ''}
         ${strip}
         ${agentRows}
         ${state.soon ? `<div class="soonmsg">${esc(state.soon)}</div>` : ''}

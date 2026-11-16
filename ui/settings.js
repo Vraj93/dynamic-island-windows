@@ -29,7 +29,7 @@ const item = (key, name, sub, disabled) => `<div class="item"><div class="t"><di
 const TOOLS = {
   calendar: ['Calendar', '255,95,87'], timer: ['Timer', '255,159,10'], alarm: ['Alarm', '255,105,97'], stopwatch: ['Stopwatch (also inside Timer)', '255,214,10'],
   focus: ['Focus', '191,140,255'], reminder: ['Reminder', '255,111,174'], note: ['Note', '99,230,190'],
-  clipboard: ['Clipboard', '100,210,255'], shelf: ['Shelf', '48,209,88'], convert: ['Convert', '64,200,224'],
+  clipboard: ['Clipboard', '100,210,255'], shelf: ['Shelf', '48,209,88'], convert: ['Convert', '64,200,224'], compress: ['Compress', '255,149,0'],
 };
 const arrow = (d) => `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="${d}"/></svg>`;
 function toolRows() {
@@ -61,6 +61,28 @@ document.addEventListener('change', (e) => {
   S.hoverDelay = Number(e.target.value);
   host.send({ type: 'set-setting', key: 'hoverDelay', value: S.hoverDelay });
 });
+// Trigger width: steps in pixels; the last one (0) means the whole top edge.
+const ZONE_STEPS = [120, 200, 320, 480, 640, 900, 1200, 0];
+const zoneIdx = (w) => { const i = ZONE_STEPS.indexOf(w == null ? 320 : w); return i < 0 ? 2 : i; };
+const zoneText = (w) => (w === 0 ? 'Whole edge' : `${w == null ? 320 : w} px`);
+document.addEventListener('input', (e) => {
+  if (e.target.id !== 'zone') return;
+  const i = Number(e.target.value);
+  e.target.style.setProperty('--fill', `${(i / (ZONE_STEPS.length - 1)) * 100}%`);
+  document.getElementById('zoneVal').textContent = zoneText(ZONE_STEPS[i]);
+});
+document.addEventListener('change', (e) => {
+  if (e.target.id !== 'zone') return;
+  S.zoneWidth = ZONE_STEPS[Number(e.target.value)];
+  host.send({ type: 'set-setting', key: 'zoneWidth', value: S.zoneWidth });
+});
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('[data-cols]');
+  if (!b) return;
+  S.tileCols = Number(b.dataset.cols);
+  host.send({ type: 'set-setting', key: 'tileCols', value: S.tileCols });
+  draw();
+});
 function setTiles(list) { host.send({ type: 'set-setting', key: 'tiles', value: list }); S.tiles = list; draw(); }
 
 const SECTIONS = {
@@ -76,13 +98,19 @@ const SECTIONS = {
 
   sheet: () => `<h1>Utility sheet</h1><p class="lead">The panel with the clock, battery and tools that drops down from the top edge.</p>
     <div class="sec">Tools in the sheet</div>
-    <div class="card">${toolRows()}</div>
+    <div class="card">${toolRows()}
+      <div class="item"><div class="t"><div class="n">Tools per row</div><div class="s">More per row makes the sheet wider and shorter; fewer makes it narrower and taller.</div></div>
+        <div class="seg">${[2, 3, 4, 5].map((n) => `<button class="segb${(S.tileCols || 3) === n ? ' on' : ''}" data-cols="${n}" aria-label="${n} per row">${n}</button>`).join('')}</div></div>
+    </div>
     <div class="sec">Opening</div>
     <div class="card">
       ${item('edgeTrigger', 'Open when the mouse reaches the top edge', 'Rest the pointer at the top-centre of the main screen. The tray icon › Open utility sheet always works too.')}
       <div class="item"><div class="t"><div class="n">Hover delay</div><div class="s">How long the pointer rests on the edge before the sheet opens. Longer means fewer accidental openings.</div></div>
         <div class="slider"><input type="range" id="delay" min="0" max="1500" step="50" value="${S.hoverDelay}" aria-label="Hover delay"
           ${S.edgeTrigger ? '' : 'disabled'} style="--fill:${(S.hoverDelay / 1500) * 100}%"><span class="val" id="delayVal">${delayText(S.hoverDelay)}</span></div></div>
+      <div class="item"><div class="t"><div class="n">Trigger width</div><div class="s">How much of the top edge, centred on the screen, opens the sheet. Narrow keeps it out of the way of browser tabs.</div></div>
+        <div class="slider"><input type="range" id="zone" min="0" max="${ZONE_STEPS.length - 1}" step="1" value="${zoneIdx(S.zoneWidth)}" aria-label="Trigger width"
+          ${S.edgeTrigger ? '' : 'disabled'} style="--fill:${(zoneIdx(S.zoneWidth) / (ZONE_STEPS.length - 1)) * 100}%"><span class="val" id="zoneVal">${zoneText(S.zoneWidth)}</span></div></div>
     </div>`,
 
   calendar: () => {

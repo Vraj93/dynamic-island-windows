@@ -27,6 +27,7 @@ const T = {
   clip: [],
   shelf: store.get('shelf', []),            // { path, name, icon, size }
   convertFiles: [], convertTo: '', convertProgress: [], convertResults: null,
+  cmp: { files: [], level: 'balanced', progress: [], results: null },
   settings: Object.assign({ liveBars: true, volumeKeys: true, clipboard: true, startWithWindows: false, chimes: true }, store.get('settings', {})),
   claudeStatus: '',
   dragging: false,
@@ -81,15 +82,17 @@ const tileSub = {
   clipboard: () => (T.settings.clipboard ? `${T.clip.length} item${T.clip.length === 1 ? '' : 's'}` : 'Off'),
   shelf: () => (T.shelf.length ? `${T.shelf.length} file${T.shelf.length === 1 ? '' : 's'}` : 'Drop files here'),
   convert: () => 'Images, audio, video',
+  compress: () => 'PDF, images, video',
 };
 TILES.forEach((t) => {
   if (tileSub[t.id]) { t.ready = true; Object.defineProperty(t, 'sub', { get: tileSub[t.id] }); }
 });
-const TILE_VIEW = { alarm: 'alarmList', stopwatch: 'stopwatch', focus: 'focusView', reminder: 'reminders', note: 'note', clipboard: 'clipboard', shelf: 'shelf', convert: 'convert' };
+const TILE_VIEW = { alarm: 'alarmList', stopwatch: 'stopwatch', focus: 'focusView', reminder: 'reminders', note: 'note', clipboard: 'clipboard', shelf: 'shelf', convert: 'convert', compress: 'compress' };
 actions.tile = (id) => {
   state.soon = '';
   if (id === 'timer') return render(state.timer ? 'timerExpanded' : 'timerSetup');
   if (id === 'convert' && !T.convertFiles.length) T.convertResults = null;
+  if (id === 'compress' && !T.cmp.files.length) T.cmp.results = null;
   render(TILE_VIEW[id]);
 };
 
@@ -486,7 +489,10 @@ document.addEventListener('drop', async (e) => {
   dragLastOver = 0;
   const paths = [...e.dataTransfer.files].map((f) => (host ? host.pathFor(f) : '')).filter(Boolean);
   if (!paths.length) { render(dragReturn || baseView()); return; }
-  if (dragSideAt(e.clientX) === 'convert') {
+  if (dragReturn === 'compress') {
+    T.cmp = { ...T.cmp, files: paths, results: null, progress: [] };
+    render('compress');
+  } else if (dragSideAt(e.clientX) === 'convert') {
     T.convertFiles = paths; T.convertResults = null; T.convertTo = ''; T.convertProgress = [];
     render('convert');
   } else {
@@ -555,6 +561,61 @@ Object.assign(actions, {
   convertShow() { const r = T.convertResults.find((x) => x.ok); if (r) post({ type: 'open-path', path: r.out }); },
 });
 
+/* ---------------- compress ----------------
+ * Makes PDFs, images and videos smaller. The copy is saved next to the original as "name (compressed)"; the
+ * original is never changed. PDFs keep their text; only the pictures in them shrink. */
+const CMP_OK = /^(pdf|jpe?g|png|bmp|gif|tiff?|heic|heif|webp|jxr|mp4|mov|m4v|mkv|avi|wmv|webm|3gp)$/;
+const CMP_LEVELS = [['small', 'Smallest', 'Lower quality'], ['balanced', 'Balanced', 'Recommended'], ['high', 'Best quality', 'A bit smaller']];
+views.compress = () => {
+  const c = T.cmp;
+  if (c.results) {
+    const ok = c.results.filter((r) => r.ok), bad = c.results.filter((r) => !r.ok);
+    const saved = ok.reduce((n, r) => n + r.before - r.after, 0);
+    return panel(`<div class="row">${ok.length ? check(20) : ''}<span class="f15 sp">${ok.length ? `Saved ${fmtSize(saved)}` : 'Nothing compressed'}</span>
+        <button class="x" data-act="cmpClear" aria-label="Close">${I.close}</button></div>
+      ${ok.map((r) => `<div class="row f13"><span class="sp ell">${esc(fileName(r.out))}</span><span class="d f12 tn">${fmtSize(r.before)} → ${fmtSize(r.after)} · −${Math.round((1 - r.after / r.before) * 100)}%</span></div>`).join('')}
+      ${bad.map((r) => `<div class="f12" style="color:#ff8a84">${esc(fileName(r.input || ''))}: ${esc(r.error)}</div>`).join('')}
+      ${ok.length ? '<div class="row" style="gap:10px"><button class="btn f" data-act="cmpShelf">Keep on shelf</button><button class="btn f w" data-act="cmpShow">Show in folder</button></div>' : ''}`, 520);
+  }
+  if (c.progress.length) {
+    return panel(`<div class="row">${spinner(20)}<span class="f15 sp">Compressing</span><span class="d f12">${c.progress.filter((p) => p.state === 'done' || p.state === 'failed').length} of ${c.progress.length}</span></div>
+      ${c.progress.map((p) => `<div class="row f13"><span class="sp ell">${esc(fileName(p.file))}</span>
+        ${p.state === 'done' ? check(16) : p.state === 'failed' ? '<span class="d f12">skipped</span>' : p.state === 'working' ? spinner(14) : '<span class="d f12">waiting</span>'}</div>`).join('')}
+      <div class="d f12">Video can take a while. You can keep working; the island shows when it's done.</div>`, 500);
+  }
+  if (!c.files.length) {
+    return panel(`${head('Compress')}
+      <div class="drop" style="height:120px"><div class="f14" style="font-weight:600">Drop files here</div>
+        <button class="btn sm" data-act="cmpPick" style="background:rgba(255,149,0,.18);color:#ffc37a">Choose files</button></div>
+      <div class="d f12">PDFs (text stays sharp; the pictures inside get smaller), photos and images (saved as JPG), and videos (saved as MP4). The originals aren't touched, and nothing leaves your PC.</div>`, 520);
+  }
+  const usable = c.files.filter((f) => CMP_OK.test(extOf(f)));
+  return panel(`${head('Compress', `<button class="x" data-act="cmpClear" aria-label="Clear files">${I.close}</button>`)}
+    <div class="row"><span class="ftp">${esc(extOf(c.files[0]).toUpperCase().slice(0, 4))}</span>
+      <div class="sp"><div class="f15 ell">${esc(fileName(c.files[0]))}</div><div class="d f12">${c.files.length > 1 ? `and ${c.files.length - 1} more` : 'One file'}</div></div></div>
+    ${usable.length ? `<div class="fmts" style="grid-template-columns:repeat(3,minmax(0,1fr))">${CMP_LEVELS.map(([k, n, s]) => `<button class="fmt${c.level === k ? ' on' : ''}" data-act="cmpLevel" data-arg="${k}" style="height:auto;padding:9px 6px;display:flex;flex-direction:column;align-items:center;gap:2px"><span>${n}</span><span class="d f12" style="font-weight:400">${s}</span></button>`).join('')}</div>
+      <button class="btn" data-act="cmpGo" style="width:100%;height:48px;background:#ff9500;color:#2a1600;font-size:15px">Compress ${usable.length} file${usable.length === 1 ? '' : 's'}</button>
+      ${usable.length < c.files.length ? `<div class="d f12">${c.files.length - usable.length} file(s) skipped: only PDFs, images and videos.</div>` : ''}`
+      : '<div class="f13" style="color:#ff8a84">Only PDFs, images and videos can be compressed.</div>'}`, 520);
+};
+Object.assign(actions, {
+  async cmpPick() { if (!host) return; const files = await host.invoke('pick-files', 'compress'); if (files.length) T.cmp = { ...T.cmp, files, results: null, progress: [] }; render('compress'); },
+  cmpLevel(l) { T.cmp.level = l; render('compress'); },
+  cmpClear() { T.cmp = { ...T.cmp, files: [], results: null, progress: [] }; render('compress'); },
+  async cmpGo() {
+    const files = T.cmp.files.filter((f) => CMP_OK.test(extOf(f)));
+    T.cmp.progress = files.map((f) => ({ file: f, state: 'waiting' }));
+    render('compress');
+    const results = host ? await host.invoke('compress', { files, level: T.cmp.level }) : [];
+    T.cmp.progress = []; T.cmp.results = results;
+    if (T.settings.chimes) doneChime();
+    if (state.view === 'compress') render('compress');
+    else { render(baseView()); showHud({ kind: 'caps', label: `${results.filter((r) => r.ok).length} file(s) compressed` }); }
+  },
+  async cmpShelf() { await addToShelf(T.cmp.results.filter((r) => r.ok).map((r) => r.out)); T.cmp = { ...T.cmp, files: [], results: null }; render('shelf'); },
+  cmpShow() { const r = T.cmp.results.find((x) => x.ok); if (r) post({ type: 'open-path', path: r.out }); },
+});
+
 /* ---------------- settings ---------------- */
 views.settings = () => {
   const s = T.settings;
@@ -611,7 +672,7 @@ baseView = function () {
   return 'none';
 };
 ['alarmRing', 'reminderDue', 'focusShift', 'focusCompact', 'swCompact'].forEach((v) => RESTING.add(v));
-['alarmList', 'alarmEdit', 'stopwatch', 'focusView', 'reminders', 'note', 'clipboard', 'shelf', 'dropZone', 'convert', 'converting', 'convertDone', 'settings'].forEach((v) => CLOSABLE.add(v));
+['alarmList', 'alarmEdit', 'stopwatch', 'focusView', 'reminders', 'note', 'clipboard', 'shelf', 'dropZone', 'convert', 'converting', 'convertDone', 'compress', 'settings'].forEach((v) => CLOSABLE.add(v));
 
 // Views with text boxes need the keyboard; everything else leaves your focus where it is.
 const TYPING = new Set(['note', 'reminders', 'alarmEdit']);
@@ -652,6 +713,10 @@ if (host) {
   host.onMessage((m) => {
     if (m.type === 'settings') applyPrefs(m.settings || {});
     else if (m.type === 'clip') { T.clip = m.items || []; if (state.view === 'clipboard') render('clipboard'); }
+    else if (m.type === 'compress-progress') {
+      if (T.cmp.progress[m.index]) T.cmp.progress[m.index].state = m.state;
+      if (state.view === 'compress') render('compress');
+    }
     else if (m.type === 'convert-progress') {
       if (m.index < T.convertProgress.length) T.convertProgress[m.index].state = m.state;
       if (state.view === 'convert') render('convert');

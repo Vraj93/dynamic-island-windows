@@ -43,7 +43,6 @@ const crypto = require('crypto');
 
 const WIN_W_MAX = 1440;       // the largest panel plus a side island beside it (the see-through rest lets clicks through)
 const WIN_H = 760;
-const ZONE_W = 320;           // width of the top-edge hover zone, centred
 const ZONE_HOLD_MS = 150;     // how long the mouse must rest there before the sheet opens
 
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required'); // timer chimes
@@ -173,7 +172,7 @@ function poll() {
 
   // Top-edge hover zone.
   const centre = d.x + d.width / 2;
-  const inZone = settings.edgeTrigger !== false && p.y <= d.y + 1 && Math.abs(p.x - centre) <= ZONE_W / 2;
+  const inZone = settings.edgeTrigger !== false && p.y <= d.y + 1 && (!settings.zoneWidth || Math.abs(p.x - centre) <= settings.zoneWidth / 2);
   const now = Date.now();
   if (inZone && !zone.inside) {
     zone = { inside: true, since: now, fired: false };
@@ -389,10 +388,12 @@ const DEFAULT_SETTINGS = {
   reminderSync: '',       // account id whose Google Tasks / Microsoft To Do your reminders sync with ('' = this PC only)
   // which tools appear in the utility sheet, in the order you put them
   // (the stopwatch lives inside Timer; it can also be shown as its own button)
-  tiles: ['calendar', 'timer', 'alarm', 'focus', 'reminder', 'note', 'clipboard', 'shelf', 'convert'],
-  tilesVersion: 3,
+  tiles: ['calendar', 'timer', 'alarm', 'focus', 'reminder', 'note', 'clipboard', 'shelf', 'convert', 'compress'],
+  tilesVersion: 4,
+  tileCols: 3,            // tools per row in the sheet (2-5); the sheet grows wider or taller to fit
+  zoneWidth: 320,         // width in pixels of the top-edge area that opens the sheet (0 = the whole top edge)
 };
-const ALL_TILES = ['calendar', 'timer', 'alarm', 'stopwatch', 'focus', 'reminder', 'note', 'clipboard', 'shelf', 'convert'];
+const ALL_TILES = ['calendar', 'timer', 'alarm', 'stopwatch', 'focus', 'reminder', 'note', 'clipboard', 'shelf', 'convert', 'compress'];
 const settingsFile = () => path.join(app.getPath('userData'), 'settings.json');
 let settings = { ...DEFAULT_SETTINGS };
 let settingsFromDisk = false;
@@ -411,6 +412,12 @@ function loadSettings() {
     settings.tilesVersion = 3;
     if (settingsFromDisk) saveSettings();
   }
+  // Once: Compress is new; put it after Convert.
+  if (settings.tilesVersion < 4) {
+    if (!settings.tiles.includes('compress')) { const i = settings.tiles.indexOf('convert'); settings.tiles.splice(i < 0 ? settings.tiles.length : i + 1, 0, 'compress'); }
+    settings.tilesVersion = 4;
+    if (settingsFromDisk) saveSettings();
+  }
 }
 function saveSettings() {
   try { fs.writeFileSync(settingsFile(), JSON.stringify(settings, null, 2)); settingsFromDisk = true; } catch (e) { log('settings save: ' + e.message); }
@@ -419,6 +426,8 @@ function setSetting(key, value) {
   if (!(key in DEFAULT_SETTINGS) || typeof value !== typeof DEFAULT_SETTINGS[key]) return;
   if (key === 'micKey' && value && !/^((Ctrl|Alt|Shift|Win)\+){1,3}([A-Z0-9]|F[1-9]|F1[0-2])$/.test(value)) return;
   if (key === 'calAlert') value = [0, 1, 2, 5, 10, 15, 30].includes(value) ? value : 5;
+  if (key === 'tileCols') value = Math.max(2, Math.min(5, Math.round(value)));
+  if (key === 'zoneWidth') value = value <= 0 ? 0 : Math.max(80, Math.min(4000, Math.round(value)));
   if (key === 'hoverDelay') value = Math.max(0, Math.min(1500, Math.round(value / 50) * 50));
   if (key === 'tiles') {
     if (!Array.isArray(value)) return;
@@ -533,10 +542,11 @@ function uniqueOut(file, ext) {
   return out;
 }
 
-function runConvert(mode, input, output, format, quality) {
+function runConvert(mode, input, output, format, quality, extra = {}) {
   return new Promise((resolve) => {
     const args = ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', path.join(UNPACKED, 'convert.ps1'),
-      '-Mode', mode, '-In', input, '-Out', output, '-Format', format, '-Quality', String(quality || 90)];
+      '-Mode', mode, '-In', input, '-Out', output, '-Format', format, '-Quality', String(quality || 90),
+      '-MaxSide', String(extra.maxSide || 0), '-Bitrate', String(extra.bitrate || 0)];
     const p = spawn('powershell.exe', args, { windowsHide: true });
     let last = null, buf = '';
     p.stdout.setEncoding('utf8');
@@ -595,8 +605,107 @@ ipcMain.handle('convert', async (_e, job) => {
   return results;
 });
 
-ipcMain.handle('pick-files', async () => {
-  const r = await dialog.showOpenDialog({ properties: ['openFile', 'multiSelections'], title: 'Choose files to convert' });
+/* ---------- compress: smaller PDFs, images and videos, saved next to the originals as "name (compressed)" ----------
+ * Images and video go through the same Windows converter as Convert (resized, lower quality / bitrate). PDFs keep
+ * their text and pages; only the pictures inside are shrunk and re-saved as JPEG. */
+const COMPRESS = {
+  small:    { q: 55, img: 1600, pdf: 1200, vid: 1280, rate: 1200e3 },
+  balanced: { q: 72, img: 2400, pdf: 1800, vid: 1920, rate: 2500e3 },
+  high:     { q: 85, img: 3600, pdf: 2600, vid: 1920, rate: 5000e3 },
+};
+function compressedName(file, ext) {
+  const dir = path.dirname(file), base = path.basename(file).replace(/.[^.]+$/, '') + ' (compressed)';
+  let out = path.join(dir, `${base}.${ext}`), n = 2;
+  while (fs.existsSync(out)) out = path.join(dir, `${base} ${n++}.${ext}`);
+  return out;
+}
+async function compressPdf(input, out, lvl) {
+  const { PDFDocument, PDFName, PDFRawStream, PDFNumber, PDFArray, PDFRef } = require('pdf-lib');
+  const zlib = require('zlib');
+  let doc;
+  try { doc = await PDFDocument.load(fs.readFileSync(input), { updateMetadata: false }); }
+  catch (e) { return { ok: false, error: /encrypt/i.test(e.message) ? 'This PDF is password-protected.' : "Couldn't read this PDF." }; }
+  const N = (k) => PDFName.of(k);
+  const objs = doc.context.enumerateIndirectObjects();
+  // soft masks must stay greyscale and untouched
+  const masks = new Set();
+  for (const [, o] of objs) if (o instanceof PDFRawStream) { const m = o.dict.get(N('SMask')); if (m instanceof PDFRef) masks.add(m.toString()); }
+  let changed = 0;
+  for (const [ref, o] of objs) {
+    if (!(o instanceof PDFRawStream) || masks.has(ref.toString())) continue;
+    const d = o.dict;
+    if (d.get(N('Subtype')) !== N('Image') || d.get(N('ImageMask')) || d.get(N('Decode')) || d.get(N('Mask'))) continue;
+    let filter = d.get(N('Filter'));
+    if (filter instanceof PDFArray) filter = filter.size() === 1 ? filter.get(0) : null;
+    const fname = filter && filter.asString ? filter.asString() : '';
+    const cs = d.get(N('ColorSpace')), csName = cs && cs.asString ? cs.asString() : (cs instanceof PDFArray ? 'array' : '');
+    const w = d.get(N('Width')) && d.get(N('Width')).asNumber(), h = d.get(N('Height')) && d.get(N('Height')).asNumber();
+    if (!w || !h || w * h < 40000) continue; // tiny pictures: not worth it
+    let img = null;
+    try {
+      if (fname === '/DCTDecode') {
+        if (csName === '/DeviceCMYK') continue;
+        img = nativeImage.createFromBuffer(Buffer.from(o.contents));
+      } else if (fname === '/FlateDecode' && !d.get(N('DecodeParms')) && (csName === '/DeviceRGB' || csName === '/DeviceGray')
+        && (!d.get(N('BitsPerComponent')) || d.get(N('BitsPerComponent')).asNumber() === 8)) {
+        const raw = zlib.inflateSync(Buffer.from(o.contents)), ch = csName === '/DeviceRGB' ? 3 : 1;
+        if (raw.length < w * h * ch) continue;
+        const bgra = Buffer.alloc(w * h * 4);
+        for (let i = 0, j = 0; i < w * h; i++, j += ch) {
+          const r = raw[j], g = ch === 3 ? raw[j + 1] : r, b = ch === 3 ? raw[j + 2] : r;
+          bgra[i * 4] = b; bgra[i * 4 + 1] = g; bgra[i * 4 + 2] = r; bgra[i * 4 + 3] = 255;
+        }
+        img = nativeImage.createFromBitmap(bgra, { width: w, height: h });
+      } else continue;
+    } catch { continue; }
+    if (!img || img.isEmpty()) continue;
+    const long = Math.max(w, h);
+    let tw = w, th = h;
+    if (long > lvl.pdf) { const k = lvl.pdf / long; tw = Math.max(1, Math.round(w * k)); th = Math.max(1, Math.round(h * k)); img = img.resize({ width: tw, height: th, quality: 'better' }); }
+    const jpg = img.toJPEG(lvl.q);
+    if (jpg.length >= o.contents.length * 0.9) continue;
+    const nd = d.clone(doc.context);
+    nd.set(N('Filter'), N('DCTDecode')); nd.delete(N('DecodeParms'));
+    nd.set(N('Width'), PDFNumber.of(tw)); nd.set(N('Height'), PDFNumber.of(th));
+    nd.set(N('ColorSpace'), N('DeviceRGB')); nd.set(N('BitsPerComponent'), PDFNumber.of(8));
+    doc.context.assign(ref, PDFRawStream.of(nd, jpg));
+    changed++;
+  }
+  const bytes = await doc.save({ useObjectStreams: true });
+  fs.writeFileSync(out, bytes);
+  return { ok: true, out, images: changed };
+}
+ipcMain.handle('compress', async (_e, job) => {
+  const files = (job && Array.isArray(job.files) ? job.files : []).filter((f) => typeof f === 'string' && fs.existsSync(f));
+  const lvl = COMPRESS[job && job.level] || COMPRESS.balanced;
+  const results = [];
+  for (let i = 0; i < files.length; i++) {
+    const f = files[i];
+    send({ type: 'compress-progress', index: i, total: files.length, state: 'working' });
+    let r;
+    try {
+      if (/.pdf$/i.test(f)) r = await compressPdf(f, compressedName(f, 'pdf'), lvl);
+      else if (IMAGE_IN.test(f)) r = await runConvert('image', f, compressedName(f, 'jpg'), 'jpg', lvl.q, { maxSide: lvl.img });
+      else if (/.(mp4|mov|m4v|mkv|avi|wmv|webm|3gp)$/i.test(f)) r = await runConvert('media', f, compressedName(f, 'mp4'), 'mp4', 90, { maxSide: lvl.vid, bitrate: lvl.rate });
+      else r = { ok: false, error: 'Only PDFs, images and videos can be compressed.' };
+    } catch (e) { r = { ok: false, error: e.message }; }
+    r.input = f;
+    if (r.ok) {
+      r.before = fs.statSync(f).size;
+      r.after = fs.existsSync(r.out) ? fs.statSync(r.out).size : 0;
+      if (!r.after || r.after >= r.before) { // nothing gained: don't leave a bigger copy behind
+        try { fs.unlinkSync(r.out); } catch { /* gone */ }
+        r = { ok: false, input: f, error: 'Already as small as it gets at this setting.' };
+      }
+    }
+    results.push(r);
+    send({ type: 'compress-progress', index: i, total: files.length, state: r.ok ? 'done' : 'failed' });
+  }
+  return results;
+});
+
+ipcMain.handle('pick-files', async (_e, why) => {
+  const r = await dialog.showOpenDialog({ properties: ['openFile', 'multiSelections'], title: why === 'compress' ? 'Choose files to compress' : 'Choose files to convert' });
   return r.canceled ? [] : r.filePaths;
 });
 

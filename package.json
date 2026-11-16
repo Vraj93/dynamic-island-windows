@@ -92,6 +92,7 @@
     ]
   },
   "dependencies": {
-    "electron-updater": "^6.8.11"
+    "electron-updater": "^6.8.11",
+    "pdf-lib": "^1.17.1"
   }
 }

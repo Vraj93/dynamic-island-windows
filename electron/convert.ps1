@@ -7,7 +7,9 @@ param(
     [Parameter(Mandatory)] [string]$In,
     [Parameter(Mandatory)] [string]$Out,
     [Parameter(Mandatory)] [string]$Format,
-    [int]$Quality = 90
+    [int]$Quality = 90,
+    [int]$MaxSide = 0,      # shrink so the longer side is at most this many pixels (0 = keep the size)
+    [int]$Bitrate = 0       # video: target bits per second (0 = the profile's own); used by Compress
 )
 $ErrorActionPreference = 'Stop'
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
@@ -19,6 +21,11 @@ try {
         $decoder = [System.Windows.Media.Imaging.BitmapDecoder]::Create([Uri]$In,
             [System.Windows.Media.Imaging.BitmapCreateOptions]::None, [System.Windows.Media.Imaging.BitmapCacheOption]::OnLoad)
         $frame = $decoder.Frames[0]
+        $long = [Math]::Max($frame.PixelWidth, $frame.PixelHeight)
+        if ($MaxSide -gt 0 -and $long -gt $MaxSide) {
+            $k = $MaxSide / $long
+            $frame = New-Object System.Windows.Media.Imaging.TransformedBitmap $frame, (New-Object System.Windows.Media.ScaleTransform $k, $k)
+        }
         switch ($Format) {
             'jpg' {
                 $enc = New-Object System.Windows.Media.Imaging.JpegBitmapEncoder
@@ -69,6 +76,21 @@ try {
         'wav' { $P::CreateWav([Windows.Media.MediaProperties.AudioEncodingQuality]::High) }
         'mp4' { $P::CreateMp4([Windows.Media.MediaProperties.VideoEncodingQuality]::HD1080p) }
         default { throw "Can't make $Format files." }
+    }
+    if ($Bitrate -gt 0 -and $profile.Video) {
+        # Compress: keep the shape of the original, cap its size, lower the bitrate.
+        $srcProf = Await ([Windows.Media.MediaProperties.MediaEncodingProfile]::CreateFromFileAsync($src)) ([Windows.Media.MediaProperties.MediaEncodingProfile])
+        $w = [int]$srcProf.Video.Width; $h = [int]$srcProf.Video.Height
+        if ($w -gt 0 -and $h -gt 0) {
+            $long = [Math]::Max($w, $h)
+            if ($MaxSide -gt 0 -and $long -gt $MaxSide) { $k = $MaxSide / $long; $w = [int]($w * $k); $h = [int]($h * $k) }
+            $profile.Video.Width = [uint32]($w - $w % 2); $profile.Video.Height = [uint32]($h - $h % 2)
+            if ($srcProf.Video.FrameRate.Numerator -gt 0) { $profile.Video.FrameRate.Numerator = $srcProf.Video.FrameRate.Numerator; $profile.Video.FrameRate.Denominator = $srcProf.Video.FrameRate.Denominator }
+        }
+        # never aim above two-thirds of what the original already uses, or a small video would not shrink
+        if ($srcProf.Video.Bitrate -gt 0) { $Bitrate = [Math]::Min($Bitrate, [int]($srcProf.Video.Bitrate * 0.65)) }
+        $profile.Video.Bitrate = [uint32]$Bitrate
+        if ($profile.Audio) { $profile.Audio.Bitrate = [uint32]128000 }
     }
     $tc = New-Object Windows.Media.Transcoding.MediaTranscoder
     $prep = Await ($tc.PrepareFileTranscodeAsync($src, $dst, $profile)) ([Windows.Media.Transcoding.PrepareTranscodeResult])
