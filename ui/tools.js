@@ -715,9 +715,9 @@ const coreRender = render;
 let hadFocus = false;
 render = function (name, opts) {
   coreRender(name, opts);
-  const want = TYPING.has(name);
+  const want = TYPING.has(name) || (name === 'compress' && !!document.getElementById('cmpTarget')); // the size box
   if (want !== hadFocus) { hadFocus = want; post({ type: 'focus', on: want }); }
-  if (want) setTimeout(() => { const el = document.querySelector('#content textarea, #content input'); if (el && document.activeElement !== el) { el.focus(); if (el.setSelectionRange) el.setSelectionRange(el.value.length, el.value.length); } }, 60);
+  if (want) setTimeout(() => { const el = document.querySelector('#content textarea, #content input'); if (el && document.activeElement !== el) { el.focus(); if (el.type === 'number') el.select(); else if (el.setSelectionRange) el.setSelectionRange(el.value.length, el.value.length); } }, 60);
 };
 
 // Clicking a resting tool island opens it.
@@ -769,3 +769,5 @@ if (host) {
   T.shelf = kept; store.set('shelf', kept);
 })();
 I.pinClip = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v5M9 3h6l-1 6 4 4H6l4-4z"/></svg>';
+// Enter in the Compress size box starts it.
+document.addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target.id === 'cmpTarget') { T.cmp.targetN = e.target.value; actions.cmpGo(); } });
