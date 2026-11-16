@@ -97,4 +97,4 @@ render = function (name, opts) {
   if (name === 'mediaExpanded' && state.lyricsOpen) requestAnimationFrame(() => followLyrics(true));
 };
 // Tapping the song row in the sheet opens the full player (its buttons still do their own thing).
-actions.openPlayer = () => render('mediaExpanded');
+actions.openPlayer = () => { state.dismissedMedia = ''; render('mediaExpanded'); }; // opened by hand: show it again

@@ -36,8 +36,8 @@ const state = {
   agents: new Map(),  // session id -> { id, project, title, status, step, startedAt, doneAt, feed, answer }
   approvals: [],      // permission requests waiting for Allow / Deny: { reqId, session, tool, input }
   focusAgent: null,   // session shown in the expanded agent panel
-  dismissedMedia: '', // track you hid by hand: stays hidden until something else plays
-  dismissedAgents: new Set(), // agent sessions you hid: back on their next task
+  dismissedMedia: '', // app you hid by hand (its media source): hidden song after song, until something else plays or it stops
+  dismissedAgents: new Set(), // agent sessions you hid: hidden until the session ends (approvals still show)
   fullscreen: false,  // a full-screen app is in front: only alerts show
   sys: null,          // last volume / brightness / Caps Lock reading
   hud: null,          // the system pop-up being shown: { kind, ... }
@@ -134,7 +134,7 @@ function mediaVisible() {
   const m = state.media;
   if (!m || !m.active || !(m.title || m.artist)) return false;
   if (!prefs.media) return false;
-  if (state.dismissedMedia && state.dismissedMedia === mediaKey(m)) return false;
+  if (state.dismissedMedia && state.dismissedMedia === m.source) return false;
   if (m.status === 'Playing') return true;
   return m.status === 'Paused' && Date.now() - state.pausedSince < PAUSED_HIDE_MS;
 }
@@ -268,9 +268,9 @@ function approvalText(a) {
   if (/^Web/.test(t)) return { title: 'Allow going online?', detail: i.url || i.query || '', mono: true };
   return { title: `Allow ${t}?`, detail: JSON.stringify(i).slice(0, 300), mono: true };
 }
-function liveAgents() {
+function liveAgents(includeHidden = false) {
   const now = Date.now();
-  return [...state.agents.values()].filter((a) => !state.dismissedAgents.has(a.id)
+  return [...state.agents.values()].filter((a) => (includeHidden || !state.dismissedAgents.has(a.id))
     && (a.status === 'working' || a.status === 'waiting' || ((a.status === 'done' || a.status === 'error') && now - a.doneAt < DONE_SHOW_MS)));
 }
 function primaryAgent() {
@@ -330,7 +330,7 @@ const views = {
         <button class="ctl sm" data-act="media" data-arg="next" aria-label="Next" ${m.canNext ? '' : 'disabled'}>${I.next(20)}</button>`}
       </div>` : '';
     // Agents at work (or just finished) get a row of their own, like the song.
-    const agentRows = liveAgents().sort((x, y) => y.updated - x.updated).slice(0, 2).map((a) => {
+    const agentRows = liveAgents(true).sort((x, y) => y.updated - x.updated).slice(0, 2).map((a) => {
       const done = a.status === 'done', err = a.status === 'error', wait = a.status === 'waiting';
       return `<button class="strip astrip" data-act="focusAgent" data-arg="${esc(a.id)}" style="--ac:${agentRgb(a)}">
         ${agentLogo(a, 44, 12)}
@@ -537,7 +537,7 @@ const views = {
           ${agentLogo(a)}
           <div class="sp"><div class="f15 ell">${esc(a.project || name)}</div><div class="d f12 ell">${esc(name)}${a.title ? ' · ' + esc(a.title) : ''}</div></div>
           ${done ? (err ? '<span class="astate" style="color:#ff6b6b">Error</span>' : `<span class="astate" style="color:#30d158">${check(14)} Done</span>`) : `<span class="astate">${spinner(14)} Working</span>`}
-          <button class="x" data-act="hideAgent" aria-label="Hide until its next task" title="Hide until its next task">${I.close}</button>
+          <button class="x" data-act="hideAgent" aria-label="Hide this chat" title="Hide this chat until it ends (it stays in the sheet)">${I.close}</button>
         </div>
         <div class="abody${right ? '' : ' solo'}">
           <div class="col" style="gap:8px;min-width:0">
@@ -638,7 +638,7 @@ const views = {
               <${many ? 'button' : 'span'} class="src" ${many ? 'data-act="sources"' : ''}><span style="width:7px;height:7px;border-radius:50%;background:${src.color}"></span>${esc(src.name)}${many ? ' ▾' : ''}</${many ? 'button' : 'span'}>
               <span class="sp"></span>
               ${prefs.lyrics !== false && !isVideoMedia(m) ? `<button class="lyrbtn${lyr ? ' on' : ''}" data-act="lyrics" aria-label="Lyrics" title="Lyrics">${I.lyrics}</button>` : ''}
-              <button class="x" data-act="hideMedia" aria-label="Hide until something else plays" title="Hide until something else plays">${I.close}</button>
+              <button class="x" data-act="hideMedia" aria-label="Hide this app's music" title="Hide this app until something else plays (it stays in the sheet)">${I.close}</button>
             </div>
             ${lyr ? lyricsDrawer() : `<div class="mtitle">
               <div class="ttl big">${esc(m.title || 'Unknown title')}</div>
@@ -1054,8 +1054,15 @@ function findCover(m) {
     if (state.media && mediaKey(state.media) === key) onMedia({ ...state.media, art: state.found.from }); // re-apply with the cover
   });
 }
-let mediaGoneTimer = null;
+let mediaGoneTimer = null, undismissTimer = null;
 function onMedia(m) {
+  // A hidden app stays hidden song after song. It shows again when another app plays, or once it has really
+  // stopped (5 s of nothing, so the moment between two songs doesn't count).
+  if (state.dismissedMedia) {
+    if (m.active && m.source && m.source !== state.dismissedMedia) { state.dismissedMedia = ''; clearTimeout(undismissTimer); }
+    else if (!m.active) { clearTimeout(undismissTimer); undismissTimer = setTimeout(() => { if (!(state.media && state.media.active)) state.dismissedMedia = ''; }, 5000); }
+    else clearTimeout(undismissTimer);
+  }
   // While the player is open, a moment of "nothing playing" (between songs) keeps showing the last song.
   if (!m.active && state.view === 'mediaExpanded' && state.media && state.media.active) {
     clearTimeout(mediaGoneTimer);
@@ -1244,7 +1251,6 @@ function onAgentEvent(ev, fromPermission) {
 
   switch (ev.hook_event_name) {
     case 'UserPromptSubmit':
-      state.dismissedAgents.delete(a.id);
       a.status = 'working'; a.startedAt = now; a.doneAt = 0; a.feed = []; a.answer = ''; a.step = 'Thinking';
       if (!ev.session_title && ev.prompt) a.title = ev.prompt.split('\n')[0];
       break;
@@ -1262,7 +1268,6 @@ function onAgentEvent(ev, fromPermission) {
       a.step = a.agent === 'cursor' ? describeStep(ev.tool_name, ev.tool_input) : 'Thinking';
       break;
     case 'Step': // a script's own progress line (--event step --text ...)
-      state.dismissedAgents.delete(a.id);
       if (a.status !== 'working') { a.status = 'working'; if (wasDone || !a.startedAt) a.startedAt = now; }
       a.step = ev.message || 'Working';
       a.feed.push({ tool: 'Step', text: a.step }); if (a.feed.length > 30) a.feed.shift();
@@ -1380,9 +1385,9 @@ const actions = {
     if (req) post({ type: 'agent-decision', reqId: req.reqId, decision });
     render(state.approvals.length ? 'approvalExpanded' : baseView());
   },
-  focusAgent(id) { state.focusAgent = id; render('agentExpanded'); },
+  focusAgent(id) { state.focusAgent = id; state.dismissedAgents.delete(id); render('agentExpanded'); }, // opened by hand: show it again
   dismissLow() { state.lowBattery = false; render(baseView()); },
-  hideMedia() { state.dismissedMedia = mediaKey(state.media); clearTimeout(peekTimer); render(baseView()); },
+  hideMedia() { state.dismissedMedia = (state.media && state.media.source) || ''; clearTimeout(peekTimer); render(baseView()); },
   hideAgent() {
     const a = state.agents.get(state.focusAgent) || primaryAgent();
     if (a) state.dismissedAgents.add(a.id);
