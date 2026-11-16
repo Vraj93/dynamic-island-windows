@@ -693,7 +693,8 @@ function render(name, { animate } = {}) {
   const changed = name !== state.view;
   state.view = name;
   if (changed) viewChangedAt = Date.now();
-  const v = views[name]();
+  const pre = takePrepared(name);
+  const v = pre ? pre.v : views[name]();
 
   clearTimeout(hideTimer);
   if (!v) {
@@ -711,11 +712,7 @@ function render(name, { animate } = {}) {
 
   const prevHtml = lastHtml;
   lastHtml = v.html;
-  measurer.innerHTML = v.html;
-  const root = measurer.firstElementChild;
-  // Round up, so text is never cut by a fraction of a pixel ("Claude Co…").
-  const box = root.getBoundingClientRect(), w = Math.ceil(box.width), h = Math.ceil(box.height);
-  measurer.innerHTML = ''; // measured: empty it, so its hidden copy of the animations stops running
+  const { w, h } = pre || measureHtml(v.html);
 
   if (island.classList.contains('gone')) {
     // Coming back from hidden: start from the small lip, never from the last panel size.
@@ -742,6 +739,8 @@ function render(name, { animate } = {}) {
   }
   content.innerHTML = v.html;
   if (changed || animate) {
+    // Big panels skip the blur in their fade-in: blurring a large area is what made the first frames late.
+    content.classList.toggle('big', w * h > 120000);
     content.classList.remove('enter', 'soft');
     void content.offsetWidth; // restart the fade-in
     content.classList.add('enter');
@@ -792,6 +791,24 @@ function patchInPlace(root, html) {
   return true;
 }
 
+function measureHtml(html) {
+  measurer.innerHTML = html;
+  const box = measurer.firstElementChild.getBoundingClientRect();
+  measurer.innerHTML = ''; // measured: empty it, so its hidden copy of the animations stops running
+  // Round up, so text is never cut by a fraction of a pixel ("Claude Co…").
+  return { w: Math.ceil(box.width), h: Math.ceil(box.height) };
+}
+/* Opening the sheet: the pointer rests on the edge for the hover delay first, so build and measure it then.
+ * When it opens, the animation starts on the very next frame instead of waiting for all that work. */
+let prepared = null;
+function prepare(name) {
+  try { const v = views[name](); if (v) prepared = { name, v, ...measureHtml(v.html), at: performance.now() }; } catch { prepared = null; }
+}
+function takePrepared(name) {
+  const p = prepared;
+  prepared = null;
+  return p && p.name === name && performance.now() - p.at < 2500 ? p : null;
+}
 function snapSize(w, h, r) {
   island.style.transition = 'none';
   island.style.width = w + 'px';
@@ -1488,6 +1505,7 @@ if (host) {
     switch (m.type) {
       case 'edge-enter':
         if (state.view === 'none') render('lip');
+        if (!CLOSABLE.has(state.view)) setTimeout(() => prepare('sheet'), 0); // after the lip has drawn
         break;
       case 'edge-open':
         clearTimeout(leaveTimer);
