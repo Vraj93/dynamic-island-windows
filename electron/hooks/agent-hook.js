@@ -166,8 +166,12 @@ function custom() {
 async function readInput() {
   if (AGENT === 'custom') return {};
   if (AGENT === 'codex') return parseMaybe(process.argv[process.argv.length - 1]); // Codex passes JSON as an argument
+  // Read stdin straight from handle 0. When an agent runs the installed app ("Dynamic Isle.exe --agent-hook"),
+  // Electron's process.stdin stream ends at once with nothing in it, though the agent did send its event; a direct
+  // read of the handle gets all of it. (Measured: stream 0 bytes, readFileSync(0) the full event.)
   let raw = '';
-  for await (const chunk of process.stdin) raw += chunk;
+  try { raw = fs.readFileSync(0, 'utf8'); } catch { /* no usable handle: fall back to the stream */ }
+  if (!raw) { try { for await (const chunk of process.stdin) raw += chunk; } catch { /* nothing */ } }
   return parseMaybe(raw.replace(/^﻿/, '')); // some shells prepend a byte-order mark
 }
 
