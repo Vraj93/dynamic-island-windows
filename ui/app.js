@@ -743,7 +743,7 @@ function render(name, { animate } = {}) {
   content.innerHTML = v.html;
   if (changed || animate) {
     // Big panels skip the blur in their fade-in: blurring a large area is what made the first frames late.
-    content.classList.toggle('big', w * h > 120000);
+    content.classList.toggle('bigpanel', w * h > 120000);
     content.classList.remove('enter', 'soft');
     void content.offsetWidth; // restart the fade-in
     content.classList.add('enter');
@@ -1599,3 +1599,4 @@ island.addEventListener('transitionend', (e) => { if (e.target === island && /wi
     });
   }, 50);
 })();
+

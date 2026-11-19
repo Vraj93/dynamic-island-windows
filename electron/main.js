@@ -52,6 +52,9 @@ app.setPath('userData', path.join(app.getPath('appData'), 'dynamic-island'));
 
 let win = null;
 let tray = null;
+let lastUnlockAt = 0;
+let lostPressLogged = false;
+let wokeAt = 0, capturedAt = 0; // see poll(): click-through after waking
 let rects = [];               // clickable areas, relative to the window
 let mouseCaptured = false;
 let zone = { inside: false, since: 0, fired: false };
@@ -93,6 +96,24 @@ function createWindow() {
   });
   win.setAlwaysOnTop(true, 'screen-saver');
   win.setIgnoreMouseEvents(true, { forward: true });
+  // After the PC is unlocked or wakes, Windows can swallow the press of a click on this window and deliver only the
+  // release, so the page never sees a click and taps "do nothing". When a release comes with no press before it,
+  // send the page a whole click at that spot. (Seen in the log: mouseUp, mouseUp, ... and no mouseDown.)
+  let pressed = false, synthesizing = false;
+  win.webContents.on('input-event', (_e, ie) => {
+    if (synthesizing) return;
+    if (ie.type === 'mouseDown') { pressed = true; return; }
+    if (ie.type !== 'mouseUp' || ie.button !== 'left') return;
+    if (pressed) { pressed = false; return; } // a normal click
+    if (!lostPressLogged) { lostPressLogged = true; log('clicks: press went missing; making whole clicks from releases'); }
+    synthesizing = true;
+    try {
+      const at = { x: Math.round(ie.x), y: Math.round(ie.y), button: 'left', clickCount: 1 };
+      win.webContents.sendInputEvent({ type: 'mouseDown', ...at });
+      win.webContents.sendInputEvent({ type: 'mouseUp', ...at });
+    } catch (e) { log('clicks: ' + e.message); }
+    synthesizing = false;
+  });
   win.loadFile(path.join(__dirname, '..', 'ui', 'index.html'));
   win.once('ready-to-show', () => win.showInactive());
   win.webContents.on('console-message', (_e, level, message) => { if (level >= 2) log('ui: ' + message); });
@@ -165,9 +186,18 @@ function poll() {
   // Take the mouse only while it is over the island.
   const lx = p.x - b.x, ly = p.y - b.y;
   const over = rects.some((r) => lx >= r.x && lx < r.x + r.w && ly >= r.y && ly < r.y + r.h);
-  if (over !== mouseCaptured) {
+  // After an unlock or wake, Windows can put the window back to click-through without telling us, and Electron
+  // then treats "take clicks" as already done. So taking clicks always goes through a real change (through, then
+  // not), and is repeated every second while the pointer stays on the island, and on every check just after waking.
+  const now0 = Date.now();
+  const fresh = now0 - wokeAt < 15000;
+  if (over !== mouseCaptured || (over && (fresh || now0 - capturedAt > 1000))) {
     mouseCaptured = over;
-    win.setIgnoreMouseEvents(!over, { forward: true });
+    if (over) {
+      win.setIgnoreMouseEvents(true, { forward: true });
+      win.setIgnoreMouseEvents(false);
+      capturedAt = now0;
+    } else win.setIgnoreMouseEvents(true, { forward: true });
   }
 
   // Top-edge hover zone.
@@ -884,6 +914,8 @@ async function recover() {
     win.setBounds(windowBounds());
     win.setAlwaysOnTop(true, 'screen-saver');
     mouseCaptured = false; win.setIgnoreMouseEvents(true, { forward: true });
+    if (!win.isFocused()) { win.setFocusable(true); win.setFocusable(false); } // let Windows set the no-focus window up again
+    lostPressLogged = false;
     if (!win.isVisible()) win.showInactive();
     if (!media) { mediaRestarts = 0; startMedia(); }   // Windows may have closed the helper during sleep
     // Is the island's screen still answering? If not within 3 s, reload it.
@@ -934,8 +966,8 @@ if (!app.requestSingleInstanceLock()) {
       send(snap);
       if (settingsWin && !settingsWin.isDestroyed()) settingsWin.webContents.send('host', snap);
     } });
-    powerMonitor.on('resume', () => { log('resumed from sleep'); calendar.nudge(); setTimeout(recover, 1500); });
-    powerMonitor.on('unlock-screen', () => { log('screen unlocked'); calendar.nudge(); setTimeout(recover, 800); });
+    powerMonitor.on('resume', () => { wokeAt = Date.now(); log('resumed from sleep'); calendar.nudge(); setTimeout(recover, 1500); });
+    powerMonitor.on('unlock-screen', () => { lastUnlockAt = wokeAt = Date.now(); log('screen unlocked'); calendar.nudge(); setTimeout(recover, 800); });
     // A crashed screen or graphics process would leave a frozen or blank island: reload it.
     app.on('child-process-gone', (_e, d) => { log(`child process gone: ${d.type} ${d.reason}`); if (d.type === 'GPU') setTimeout(recover, 1000); });
     (function pollLoop() {

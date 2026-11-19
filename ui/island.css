@@ -33,7 +33,7 @@ body.demo{background:
 #clip{position:absolute;inset:0;overflow:hidden;border-radius:inherit}
 #content{position:absolute;top:0;left:50%;transform:translateX(-50%)}
 #content.enter{animation:enter .4s cubic-bezier(.2,.8,.2,1) both}
-#content.enter.big{animation-name:enterBig}
+#content.enter.bigpanel{animation-name:enterBig} /* not .big: that is the big-number text style */
 /* same screen, new details: fade the new text in */
 #content.soft{animation:soft .32s ease-out both}
 @keyframes soft{from{opacity:.35}to{opacity:1}}
